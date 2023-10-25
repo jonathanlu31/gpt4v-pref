@@ -1,5 +1,9 @@
 *.pt
 *.json
+*.dat
+*.mp4
+ffmpeg
+laryn-env
 
 wandb/
 PATH/

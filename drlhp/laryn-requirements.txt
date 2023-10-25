@@ -1,0 +1,7 @@
+numpy<1.24
+pyglet
+scipy
+scikit-video
+pygame
+opencv-python
+moviepy
