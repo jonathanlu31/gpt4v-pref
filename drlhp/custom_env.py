@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
         self.action_space = self.base_env.action_space
         # Example for using image as input (channel-first; channel-last also works):
         self.observation_space = self.base_env.observation_space
-        self.include_action = args.include_action
+        self.include_action = args.include_actions
         # self.reward_predictor = RewardPredictorNetwork()
         self.observations = []
         self.actions = []

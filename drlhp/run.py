@@ -32,20 +32,21 @@ def main(args):
 
 def run(args):
     env = CustomEnv(args)
-    policy = PPO("MlpPolicy", env)
-    event_callback = EveryNTimesteps(
-        n_steps=args.train_reward_interval,
-        callback=lambda: train_reward_predictor(args, env),
-    )
+    policy = PPO("MlpPolicy", env, verbose=1)
+    # event_callback = EveryNTimesteps(
+    #     n_steps=args.train_reward_interval,
+    #     callback=lambda: train_reward_predictor(args, env),
+    # )
 
-    policy.learn(1e6, callback=event_callback)
+    # policy.learn(1e6, callback=event_callback)
+    policy.learn(1e6)
 
     vec_env = policy.get_env()
     obs = vec_env.reset()
     for i in range(1000):
         action, _state = policy.predict(obs, deterministic=True)
         obs, reward, done, info = vec_env.step(action)
-        vec_env.render("human")
+        # vec_env.render("human")
 
 
 if __name__ == "__main__":
