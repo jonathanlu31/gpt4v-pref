@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 
-# from reward_predictor import RewardPredictorNetwork
+from reward_predictor import RewardPredictorNetwork
 # from pref_db import PrefDB
 
 
@@ -12,15 +12,11 @@ class CustomEnv(gym.Env):
 
     def __init__(self, args):
         super().__init__()
-        # Define action and observation space
-        # They must be gym.spaces objects
-        # Example when using discrete actions:
         self.base_env = gym.make("Swimmer-v4")
-        self.action_space = self.base_env.action_space
-        # Example for using image as input (channel-first; channel-last also works):
         self.observation_space = self.base_env.observation_space
-        self.include_action = args.include_actions
-        # self.reward_predictor = RewardPredictorNetwork()
+        self.action_space = self.base_env.action_space
+        self.include_actions = args.include_actions
+        self.reward_predictor = RewardPredictorNetwork(self.observation_space.shape, self.action_space.shape, args.reward_model_lr)
         self.observations = []
         self.actions = []
         self.dones = []
@@ -28,9 +24,8 @@ class CustomEnv(gym.Env):
 
     def step(self, action):
         obs, _base_reward, term, trunc, info = self.base_env.step(action)
-        # if
-        # reward = self.reward_predictor(self.observations[-1])
-        reward = _base_reward
+        reward = self.reward_predictor.get_reward(self.observations[-1], action)
+        # reward = _base_reward
         self.observations.append(obs)
         self.actions.append(action)
         self.dones.append(term)
