@@ -15,6 +15,7 @@ from random import shuffle
 import numpy as np
 
 from utils import VideoRenderer
+from pref_db import Segment
 
 
 class PrefInterface:
@@ -24,7 +25,7 @@ class PrefInterface:
             vid_queue=self.vid_q, mode=VideoRenderer.restart_on_get_mode, zoom=4
         )
         self.seg_idx = 0
-        self.segments = []
+        self.segments: list[Segment] = []
         self.tested_pairs = set()  # For O(1) lookup
         # self.max_segs = max_segs
         # easy_tf_log.set_dir(log_dir)
@@ -118,6 +119,8 @@ class PrefInterface:
             frame = np.hstack((s1.frames[t][:, :, -1], border, s2.frames[t][:, :, -1]))
             vid.append(frame)
         n_pause_frames = 7
+
+        # TODO: document why
         for _ in range(n_pause_frames):
             vid.append(np.copy(vid[-1]))
         self.vid_q.put(vid)
@@ -143,6 +146,7 @@ class PrefInterface:
         elif choice == "":
             pref = None
 
+        # TODO: why?
         self.vid_q.put([np.zeros(vid[0].shape, dtype=np.uint8)])
 
         return pref
