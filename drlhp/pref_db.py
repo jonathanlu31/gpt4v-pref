@@ -6,8 +6,9 @@ import queue
 import time
 import zlib
 from threading import Lock, Thread
+from multiprocessing import Queue
 
-import easy_tf_log
+# import easy_tf_log
 import numpy as np
 
 
@@ -39,7 +40,7 @@ class Segment:
         return len(self.frames)
 
 
-class CompressedDict(collections.MutableMapping):
+class CompressedDict(collections.abc.MutableMapping):
     def __init__(self):
         self.store = dict()
 
@@ -78,7 +79,7 @@ class PrefDB:
         self.prefs = []
         self.maxlen = maxlen
 
-    def append(self, s1, s2, pref):
+    def append(self, s1: Segment, s2: Segment, pref):
         k1 = hash(np.array(s1).tostring())
         k2 = hash(np.array(s2).tostring())
 
@@ -133,8 +134,17 @@ class PrefBuffer:
     def __init__(self, db_train, db_val):
         self.train_db = db_train
         self.val_db = db_val
+        self.lock = Lock()
+        self.stop_recv = False
 
-    def recv_prefs(self, pref_pipe):
+    def start_recv_thread(self, pref_pipe):
+        self.stop_recv = False
+        Thread(target=self.recv_prefs, args=(pref_pipe,)).start()
+
+    def stop_recv_thread(self):
+        self.stop_recv = True
+
+    def recv_prefs(self, pref_pipe: Queue):
         n_recvd = 0
         while not self.stop_recv:
             try:
@@ -147,10 +157,16 @@ class PrefBuffer:
                 self.val_db.maxlen + self.train_db.maxlen
             )
 
+            self.lock.acquire(blocking=True)
             if np.random.rand() < val_fraction:
                 self.val_db.append(s1, s2, pref)
+                # easy_tf_log.tflog('val_db_len', len(self.val_db))
             else:
                 self.train_db.append(s1, s2, pref)
+                # easy_tf_log.tflog('train_db_len', len(self.train_db))
+            self.lock.release()
+
+            # easy_tf_log.tflog('n_prefs_recvd', n_recvd)
 
     def train_db_len(self):
         return len(self.train_db)
@@ -159,14 +175,18 @@ class PrefBuffer:
         return len(self.val_db)
 
     def get_dbs(self):
+        self.lock.acquire(blocking=True)
         train_copy = copy.deepcopy(self.train_db)
         val_copy = copy.deepcopy(self.val_db)
+        self.lock.release()
         return train_copy, val_copy
 
-    def wait_until_len(self, min_len):
+    def wait_until_len(self, min_len: int):
         while True:
+            self.lock.acquire()
             train_len = len(self.train_db)
             val_len = len(self.val_db)
+            self.lock.release()
             if train_len >= min_len and val_len != 0:
                 break
             print("Waiting for preferences; {} so far".format(train_len))

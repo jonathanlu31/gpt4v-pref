@@ -32,13 +32,14 @@ class RewardPredictorNetwork(nn.Module):
         self.ob_dim = ob_dim
         self.ac_dim = ac_dim
         self.core_network = CoreNetwork(ob_dim, ac_dim)
+        self.epoch = 100
 
         # self.dropout = dropout
         # self.batchnorm = batchnorm
 
-        self.optimizer = torch.optim.Adam(
-            self.core_network.parameters(), lr=lr
-        )
+        self.optimizer = torch.optim.Adam(self.core_network.parameters(), lr=lr)
+
+        self.timestep = 0
 
     def forward(self, s1, s2):
         """Gets the reward preference
@@ -71,3 +72,8 @@ class RewardPredictorNetwork(nn.Module):
 
         loss.backward()
         self.optimizer.step()
+
+        self.timestep += 1
+
+        if self.timestep % self.epoch == 0:
+            torch.save(self.core_network.state_dict(), PATH)

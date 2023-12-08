@@ -35,10 +35,10 @@ class PrefInterface:
             self.renderer.stop()
 
     def run(self, seg_pipe, pref_pipe):
-        # while len(self.segments) < 2:
-        #     print("Preference interface waiting for segments")
-        #     time.sleep(5.0)
-        #     self.recv_segments(seg_pipe)
+        while len(self.segments) < 2:
+            print("Preference interface waiting for segments")
+            time.sleep(5.0)
+            self.recv_segments(seg_pipe)
 
         while True:
             seg_pair = None
@@ -71,24 +71,25 @@ class PrefInterface:
 
             # self.recv_segments(seg_pipe)
 
-    # def recv_segments(self, seg_pipe):
-    #     """
-    #     Receive segments from `seg_pipe` into circular buffer `segments`.
-    #     """
-    #     max_wait_seconds = 0.5
-    #     start_time = time.time()
-    #     n_recvd = 0
-    #     while time.time() - start_time < max_wait_seconds:
-    #         try:
-    #             segment = seg_pipe.get(block=True, timeout=max_wait_seconds)
-    #         except queue.Empty:
-    #             return
-    #         if len(self.segments) < self.max_segs:
-    #             self.segments.append(segment)
-    #         else:
-    #             self.segments[self.seg_idx] = segment
-    #             self.seg_idx = (self.seg_idx + 1) % self.max_segs
-    #         n_recvd += 1
+    def recv_segments(self, seg_pipe):
+        """
+        Receive segments from `seg_pipe` into circular buffer `segments`.
+        """
+        max_wait_seconds = 0.5
+        start_time = time.time()
+        n_recvd = 0
+        while time.time() - start_time < max_wait_seconds:
+            try:
+                segment = seg_pipe.get(block=True, timeout=max_wait_seconds)
+            except queue.Empty:
+                return
+            if len(self.segments) < self.max_segs:
+                self.segments.append(segment)
+            else:
+                self.segments[self.seg_idx] = segment
+                self.seg_idx = (self.seg_idx + 1) % self.max_segs
+            n_recvd += 1
+
     # easy_tf_log.tflog('segment_idx', self.seg_idx)
     # easy_tf_log.tflog('n_segments_rcvd', n_recvd)
     # easy_tf_log.tflog('n_segments', len(self.segments))

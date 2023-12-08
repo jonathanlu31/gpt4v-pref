@@ -172,8 +172,13 @@ def start_episode_renderer():
 
 
 import pygame
+
+print("before error")
 import moviepy.editor
+
+print("after error")
 import cv2
+
 
 import skvideo
 
@@ -199,7 +204,9 @@ if __name__ == "__main__":
     # videodata = skvideo.io.vread("vid.mp4")[:, :, :, -1]
     # print(skvideo.io.vread("vid.mp4").shape)
     videodata = skvideo.io.vread("vid.mp4")
-    videodata = np.load("bw.dat")
+
+    # videodata = np.load("bw.dat")
+
     # episode_vid_queue.put(videodata[:, :, :, -1])
     # episode_renderer.render()
 
@@ -217,6 +224,8 @@ if __name__ == "__main__":
     # out.write(data)
     out.release()
     print("done")
+
+    print(videodata)
 
     pygame.init()
     video = moviepy.editor.VideoFileClip("out.mp4")

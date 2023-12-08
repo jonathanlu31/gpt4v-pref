@@ -2,6 +2,8 @@ import logging
 import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EveryNTimesteps
+from stable_baselines3.common.callbacks import BaseCallback
+
 import numpy as np
 import random
 import sys
@@ -11,12 +13,83 @@ import os
 from custom_env import CustomEnv
 from params import parse_args
 from pref_interface import PrefInterface
+from reward_predictor import RewardPredictorNetwork
+from pref_db import PrefDB, PrefBuffer
 
 
 def set_random_seed(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     random.seed(seed)
+
+
+class CustomCallback(BaseCallback):
+    """
+    A custom callback that derives from ``BaseCallback``.
+
+    :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
+    """
+
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+        # Those variables will be accessible in the callback
+        # (they are defined in the base class)
+        # The RL model
+        # self.model = None  # type: BaseAlgorithm
+        # An alias for self.model.get_env(), the environment used for training
+        # self.training_env = None  # type: Union[gym.Env, VecEnv, None]
+        # Number of time the callback was called
+        # self.n_calls = 0  # type: int
+        # self.num_timesteps = 0  # type: int
+        # local and global variables
+        # self.locals = None  # type: Dict[str, Any]
+        # self.globals = None  # type: Dict[str, Any]
+        # The logger object, used to report things in the terminal
+        # self.logger = None  # stable_baselines3.common.logger
+        # # Sometimes, for event callback, it is useful
+        # # to have access to the parent object
+        # self.parent = None  # type: Optional[BaseCallback]
+
+    def _on_training_start(self) -> None:
+        """
+        This method is called before the first rollout starts.
+        """
+        pass
+
+    def _on_rollout_start(self) -> None:
+        """
+        A rollout is the collection of environment interaction
+        using the current policy.
+        This event is triggered before collecting new samples.
+        """
+        pass
+
+    def _on_step(self) -> bool:
+        """
+        This method will be called by the model after each call to `env.step()`.
+
+        For child callback (of an `EventCallback`), this will be called
+        when the event is triggered.
+
+        :return: If the callback returns False, training is aborted early.
+        """
+        # get preference pair
+        s1, s2 = pref_interface.sample_seg_pair()
+        reward = reward_predictor(s1, s2)
+
+        return True
+
+    def _on_rollout_end(self) -> None:
+        """
+        This event is triggered before updating the policy.
+        """
+        pass
+
+    def _on_training_end(self) -> None:
+        """
+        This event is triggered before exiting the `learn()` method.
+        """
+        pass
 
 
 def train_reward_predictor(args, env):
@@ -36,24 +109,60 @@ def main(args):
 def run(args):
     seg_pipe = Queue(maxsize=1)
     pref_pipe = Queue(maxsize=1)
-    env = CustomEnv(args)
-    policy = PPO("MlpPolicy", env, verbose=1)
-    event_callback = EveryNTimesteps(
-        n_steps=args.train_reward_interval,
-        callback=lambda: train_reward_predictor(args, env),
-    )
 
-    # Have policy run for x number of steps first to collect some trajectories
-    # Then start the full process
-    policy.learn(1e6, callback=event_callback)
-    # policy.learn(1e6)
+    # pi, pi_proc = start_preference_labeling_process(args, seg_pipe, pref_pipe, ...):
 
-    vec_env = policy.get_env()
-    obs = vec_env.reset()
-    for i in range(1000):
-        action, _state = policy.predict(obs, deterministic=True)
-        obs, reward, done, info = vec_env.step(action)
-        # vec_env.render("human")
+    # pi_proc.terminate()
+
+
+def start_training(
+    args,
+    gen_segments: bool,
+    start_policy_training_pipe,
+    seg_pipe: Queue,
+    pref_pipe: Queue,
+    episode_vid_queue,
+    log_dir,
+    a2c_params,
+):
+    def f():
+        env = CustomEnv(args)
+        policy = PPO("MlpPolicy", env, verbose=1)
+        event_callback = EveryNTimesteps(
+            n_steps=args.collect_seg_interval,
+            callback=lambda: train_reward_predictor(args, env),
+        )
+
+        ckpt_dir = osp.join(log_dir, "policy_checkpoints")
+        os.makedirs(ckpt_dir)
+
+        reward_predictor = RewardPredictorNetwork()
+        misc_logs_dir = osp.join(log_dir, "a2c_misc")
+
+        n_train = args.max_prefs * (1 - args.prefs_val_fraction)
+        n_val = args.max_prefs * args.prefs_val_fraction
+        pref_db_train = PrefDB(maxlen=n_train)
+        pref_db_val = PrefDB(maxlen=n_val)
+
+        pref_buffer = PrefBuffer(db_train=pref_db_train, db_val=pref_db_val)
+        pref_buffer.start_recv_thread(pref_pipe)
+
+        for i in range(num_epochs):
+            """Train policy for x steps
+            Collect segments
+            Train reward for y steps
+            """
+            # Have policy run for x number of steps first to collect some trajectories
+            # Then start the full process
+            if gen_segments:
+                policy.learn(args.train_steps_per_epoch, callback=event_callback)
+            else:
+                policy.learn(args.train_steps_per_epoch)
+
+    proc = Process(target=f, daemon=True)
+    proc.start()
+    return env, proc
+
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir, max_segs):
     def f():
@@ -64,13 +173,11 @@ def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir, max_se
         pi.run(seg_pipe=seg_pipe, pref_pipe=pref_pipe)
 
     # Needs to be done in the main process because does GUI setup work
-    prefs_log_dir = os.path.join(log_dir, 'pref_interface')
-    pi = PrefInterface(max_segs=max_segs,
-                       log_dir=prefs_log_dir)
+    prefs_log_dir = os.path.join(log_dir, "pref_interface")
+    pi = PrefInterface(max_segs=max_segs, log_dir=prefs_log_dir)
     proc = Process(target=f, daemon=True)
     proc.start()
     return pi, proc
-
 
 
 if __name__ == "__main__":
