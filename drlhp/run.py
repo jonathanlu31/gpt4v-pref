@@ -3,6 +3,7 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EveryNTimesteps
 from stable_baselines3.common.callbacks import BaseCallback
+import tqdm
 
 import numpy as np
 import random
@@ -12,9 +13,10 @@ import os
 
 from custom_env import CustomEnv
 from params import parse_args
-from pref_interface import PrefInterface
+
+# from pref_interface import PrefInterface
 from reward_predictor import RewardPredictorNetwork
-from pref_db import PrefDB, PrefBuffer
+from pref_db import PrefDB, PrefBuffer, Segment
 
 
 def set_random_seed(seed=42):
@@ -23,14 +25,14 @@ def set_random_seed(seed=42):
     random.seed(seed)
 
 
-class CustomCallback(BaseCallback):
+class PretrainCallback(BaseCallback):
     """
     A custom callback that derives from ``BaseCallback``.
 
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, verbose=0):
+    def __init__(self, num_steps_explore, collect_seg_interval, seg_pipe, verbose=0):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -49,12 +51,30 @@ class CustomCallback(BaseCallback):
         # # Sometimes, for event callback, it is useful
         # # to have access to the parent object
         # self.parent = None  # type: Optional[BaseCallback]
+        self.num_steps_explore = num_steps_explore
+        self.collect_seg_interval = collect_seg_interval
+        self.seg_pipe = seg_pipe
 
     def _on_training_start(self) -> None:
         """
         This method is called before the first rollout starts.
         """
-        pass
+        obs = self.training_env.reset()
+        seg = Segment()
+
+        for i in range(1, self.num_steps_explore + 1):
+            ac, _states = self.model.predict(obs)
+            obs, rewards, dones, info = self.training_env.step(ac)
+
+            frame = self.training_env.render()
+
+            seg.append(frame, rewards, obs, ac)
+
+            # add frame to buffer
+            if i % self.collect_seg_interval == 0:
+                seg.finalise()
+                self.seg_pipe.append(seg)
+                seg = Segment()
 
     def _on_rollout_start(self) -> None:
         """
@@ -71,12 +91,8 @@ class CustomCallback(BaseCallback):
         For child callback (of an `EventCallback`), this will be called
         when the event is triggered.
 
-        :return: If the callback returns False, training is aborted early.
+        :return: (bool) If the callback returns False, training is aborted early.
         """
-        # get preference pair
-        s1, s2 = pref_interface.sample_seg_pair()
-        reward = reward_predictor(s1, s2)
-
         return True
 
     def _on_rollout_end(self) -> None:
@@ -110,6 +126,8 @@ def run(args):
     seg_pipe = Queue(maxsize=1)
     pref_pipe = Queue(maxsize=1)
 
+    ppo_proc = start_training(args, True, seg_pipe, pref_pipe)
+
     # pi, pi_proc = start_preference_labeling_process(args, seg_pipe, pref_pipe, ...):
 
     # pi_proc.terminate()
@@ -118,26 +136,20 @@ def run(args):
 def start_training(
     args,
     gen_segments: bool,
-    start_policy_training_pipe,
     seg_pipe: Queue,
     pref_pipe: Queue,
-    episode_vid_queue,
-    log_dir,
-    a2c_params,
+    episode_vid_queue=None,
+    log_dir=None,
 ):
     def f():
         env = CustomEnv(args)
         policy = PPO("MlpPolicy", env, verbose=1)
-        event_callback = EveryNTimesteps(
-            n_steps=args.collect_seg_interval,
-            callback=lambda: train_reward_predictor(args, env),
-        )
 
-        ckpt_dir = osp.join(log_dir, "policy_checkpoints")
-        os.makedirs(ckpt_dir)
+        # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
+        # os.makedirs(ckpt_dir)
 
-        reward_predictor = RewardPredictorNetwork()
-        misc_logs_dir = osp.join(log_dir, "a2c_misc")
+        # reward_predictor = RewardPredictorNetwork()
+        # misc_logs_dir = osp.join(log_dir, "a2c_misc")
 
         n_train = args.max_prefs * (1 - args.prefs_val_fraction)
         n_val = args.max_prefs * args.prefs_val_fraction
@@ -147,21 +159,29 @@ def start_training(
         pref_buffer = PrefBuffer(db_train=pref_db_train, db_val=pref_db_val)
         pref_buffer.start_recv_thread(pref_pipe)
 
-        for i in range(num_epochs):
-            """Train policy for x steps
-            Collect segments
-            Train reward for y steps
-            """
+        for i in range(args.num_epochs):
             # Have policy run for x number of steps first to collect some trajectories
             # Then start the full process
             if gen_segments:
-                policy.learn(args.train_steps_per_epoch, callback=event_callback)
+                policy.learn(
+                    args.train_steps_per_epoch,
+                    callback=PretrainCallback(
+                        1000, seg_pipe, args.collect_seg_interval
+                    ),
+                )
             else:
                 policy.learn(args.train_steps_per_epoch)
 
+            # for i in tqdm.trange(
+            #     args.num_reward_steps_per_epoch, dynamic_ncols=True
+            # ):
+            #     pref_batch = pref_buffer.sample()
+            #     reward_predictor.update()
+
     proc = Process(target=f, daemon=True)
     proc.start()
-    return env, proc
+    proc.join()
+    return proc
 
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir, max_segs):

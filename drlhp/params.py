@@ -24,6 +24,12 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         default=1e-3,
         help="Learning rate for the reward predictor",
     )
+    parser.add_argument(
+        "--rwd-mdl-bs",
+        type=int,
+        default=32,
+        help="Batch size for training of the reward ensemble",
+    )
 
 
 def add_policy_args(parser: ArgumentParser) -> None:
@@ -45,3 +51,6 @@ def add_general_args(parser: ArgumentParser):
     parser.add_argument("--seed", type=int, default=42)
 
     parser.add_argument("--prefs_val_fraction", type=float, default=0.2)
+    parser.add_argument("--collect_seg_interval", type=int, default=50)
+    parser.add_argument("--max_prefs", type=int, default=5)
+    parser.add_argument("--num_epochs", type=int, default=1)

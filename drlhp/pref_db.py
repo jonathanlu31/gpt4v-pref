@@ -7,6 +7,8 @@ import time
 import zlib
 from threading import Lock, Thread
 from multiprocessing import Queue
+from torch.utils.data import Dataset
+import torch
 
 # import easy_tf_log
 import numpy as np
@@ -22,11 +24,15 @@ class Segment:
     def __init__(self):
         self.frames = []
         self.rewards = []
+        self.observations = []
+        self.actions = []
         self.hash = None
 
-    def append(self, frame, reward):
+    def append(self, frame, reward, ob, act):
         self.frames.append(frame)
         self.rewards.append(reward)
+        self.observations.append(ob)
+        self.actions.append(act)
 
     def finalise(self, seg_id=None):
         if seg_id is not None:
@@ -36,15 +42,24 @@ class Segment:
             # it only takes about 0.5 ms.
             self.hash = hash(np.array(self.frames).tostring())
 
+    def get_trajectory_format(self):
+        """Interleave the observations and actions to be in the format expected by the reward predictors
+
+        i.e. [num_timesteps x (ob_dim + ac_dim)]
+        """
+        ob_acts = zip(self.observations, self.actions)
+        ob_acts_np = np.array([np.stack([ob, ac], axis=1) for ob, ac in ob_acts])
+        return ob_acts_np
+
     def __len__(self):
         return len(self.frames)
 
 
 class CompressedDict(collections.abc.MutableMapping):
     def __init__(self):
-        self.store = dict()
+        self.store: dict[str, Segment] = dict()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key) -> Segment:
         return pickle.loads(zlib.decompress(self.store[key]))
 
     def __setitem__(self, key, value):
@@ -56,14 +71,14 @@ class CompressedDict(collections.abc.MutableMapping):
     def __iter__(self):
         return iter(self.store)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.store)
 
     def __keytransform__(self, key):
         return key
 
 
-class PrefDB:
+class PrefDB(Dataset):
     """
     A circular database of preferences about pairs of segments.
 
@@ -74,9 +89,10 @@ class PrefDB:
     """
 
     def __init__(self, maxlen):
+        super().__init__()
         self.segments = CompressedDict()
         self.seg_refs = {}
-        self.prefs = []
+        self.prefs: list[tuple[str, str, int]] = []
         self.maxlen = maxlen
 
     def append(self, s1: Segment, s2: Segment, pref):
@@ -113,6 +129,21 @@ class PrefDB:
 
     def __len__(self):
         return len(self.prefs)
+
+    def __getitem__(self, idx: int):
+        k1, k2, pref = self.prefs[idx]
+        s1, s2 = self.segments[k1], self.segments[k2]
+        s1_pt, s2_pt = torch.from_numpy(s1.get_trajectory_format()), torch.from_numpy(
+            s2.get_trajectory_format()
+        )
+
+        if pref == 1:
+            pref_pt = torch.Tensor([0, 1])
+        elif pref == 0:
+            pref_pt = torch.Tensor([0.5, 0.5])
+        else:
+            pref_pt = torch.Tensor([1, 0])
+        return s1_pt, s2_pt, pref_pt
 
     def save(self, path):
         with gzip.open(path, "wb") as pkl_file:
