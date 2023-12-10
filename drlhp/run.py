@@ -59,23 +59,26 @@ class PretrainCallback(BaseCallback):
         """
         This method is called before the first rollout starts.
         """
-        obs = self.training_env.reset()
+        base_env = self.training_env.envs[0].env
+        obs, info = base_env.reset()
         seg = Segment()
 
         for i in range(1, self.num_steps_explore + 1):
             ac, _states = self.model.predict(obs)
-            obs, rewards, dones, info = self.training_env.step(ac)
+            obs, rewards, done, trunc, info = base_env.step(ac)
 
-            frame = self.training_env.render()
-            print(frame)
+            frame = base_env.render()
 
             seg.append(frame, rewards, obs, ac)
 
             # add frame to buffer
-            if i % self.collect_seg_interval == 0:
+            if done or i % self.collect_seg_interval == 0:
                 seg.finalise()
                 self.seg_pipe.put(seg)
                 seg = Segment()
+
+                if done:
+                    obs = base_env.reset()
 
     def _on_rollout_start(self) -> None:
         """
@@ -107,12 +110,6 @@ class PretrainCallback(BaseCallback):
         This event is triggered before exiting the `learn()` method.
         """
         pass
-
-
-def train_reward_predictor(args, env):
-    # Rating the buffer of segments collected so far
-    # Training the reward predictor on those segments
-    pass
 
 
 def main(args):

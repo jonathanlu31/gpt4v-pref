@@ -10,8 +10,6 @@ from reward_predictor import RewardPredictorEnsemble
 class CustomEnv(gym.Env):
     """Custom Environment that follows gym interface."""
 
-    metadata = {"render_modes": ["human"], "render_fps": 30}
-
     def __init__(self, args):
         super().__init__()
         self.base_env = gym.make("Swimmer-v4", render_mode="rgb_array")
@@ -46,7 +44,6 @@ class CustomEnv(gym.Env):
         return self.prev_obs, info
 
     def render(self):
-        # TODO: Laryn
         return self.base_env.render()
 
     def close(self):

@@ -1,23 +1,16 @@
 from multiprocessing import Process
-
-
-class Obj:
-    pass
+import gymnasium as gym
 
 
 def main():
-    o = Obj()
-    test = []
-
     def child():
-        print(f"child obj: {repr(o)}")
-        test.append(1)
+        env = gym.make("Swimmer-v4", render_mode="rgb_array")
+        env.reset()
+        print(env.render())
 
     p = Process(target=child, daemon=True)
     p.start()
-    print(f"parent obj: {repr(o)}")
     p.join()
-    print(test)
 
 
 main()
