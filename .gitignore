@@ -4,6 +4,7 @@
 *.mp4
 ffmpeg
 laryn-env
+.env
 
 wandb/
 PATH/
