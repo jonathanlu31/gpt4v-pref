@@ -30,6 +30,12 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         default=32,
         help="Batch size for training of the reward ensemble",
     )
+    parser.add_argument(
+        "--ensemble-size",
+        type=int,
+        default=1,
+        help="Number of reward predictors in the ensemble",
+    )
 
 
 def add_policy_args(parser: ArgumentParser) -> None:
@@ -50,7 +56,8 @@ def add_policy_args(parser: ArgumentParser) -> None:
 def add_general_args(parser: ArgumentParser):
     parser.add_argument("--seed", type=int, default=42)
 
-    parser.add_argument("--prefs_val_fraction", type=float, default=0.2)
-    parser.add_argument("--collect_seg_interval", type=int, default=50)
-    parser.add_argument("--max_prefs", type=int, default=5)
-    parser.add_argument("--num_epochs", type=int, default=1)
+    parser.add_argument("--prefs-val-fraction", type=float, default=0.2)
+    parser.add_argument("--collect-seg-interval", type=int, default=50)
+    parser.add_argument("--max-prefs", type=int, default=5)
+    parser.add_argument("--max-segs", type=int, default=5)
+    parser.add_argument("--num-epochs", type=int, default=1)

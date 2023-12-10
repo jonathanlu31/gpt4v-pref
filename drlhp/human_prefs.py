@@ -98,6 +98,8 @@ class VideoRenderer:
 
     @staticmethod
     def render_two_np_array(arr1: np.ndarray, arr2: np.ndarray):
+        """Format: (num_frames x height x width x channels)"""
+        print(arr1.shape)
         new_height = max(arr1.shape[1], arr2.shape[1])
         new_frames = max(arr1.shape[0], arr2.shape[0])
         joint = np.zeros(

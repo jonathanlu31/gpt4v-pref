@@ -14,7 +14,7 @@ import os
 from custom_env import CustomEnv
 from params import parse_args
 
-# from pref_interface import PrefInterface
+from pref_interface import PrefInterface
 from reward_predictor import RewardPredictorNetwork
 from pref_db import PrefDB, PrefBuffer, Segment
 
@@ -32,7 +32,7 @@ class PretrainCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, num_steps_explore, collect_seg_interval, seg_pipe, verbose=0):
+    def __init__(self, num_steps_explore, seg_pipe, collect_seg_interval, verbose=0):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -67,13 +67,14 @@ class PretrainCallback(BaseCallback):
             obs, rewards, dones, info = self.training_env.step(ac)
 
             frame = self.training_env.render()
+            print(frame)
 
             seg.append(frame, rewards, obs, ac)
 
             # add frame to buffer
             if i % self.collect_seg_interval == 0:
                 seg.finalise()
-                self.seg_pipe.append(seg)
+                self.seg_pipe.put(seg)
                 seg = Segment()
 
     def _on_rollout_start(self) -> None:
@@ -128,8 +129,8 @@ def run(args):
 
     ppo_proc = start_training(args, True, seg_pipe, pref_pipe)
 
-    # pi, pi_proc = start_preference_labeling_process(args, seg_pipe, pref_pipe, ...):
-
+    pi, pi_proc = start_preference_labeling_process(args, seg_pipe, pref_pipe)
+    ppo_proc.join()
     # pi_proc.terminate()
 
 
@@ -180,11 +181,10 @@ def start_training(
 
     proc = Process(target=f, daemon=True)
     proc.start()
-    proc.join()
     return proc
 
 
-def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir, max_segs):
+def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
     def f():
         # The preference interface needs to get input from stdin. stdin is
         # automatically closed at the beginning of child processes in Python,
@@ -193,8 +193,8 @@ def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir, max_se
         pi.run(seg_pipe=seg_pipe, pref_pipe=pref_pipe)
 
     # Needs to be done in the main process because does GUI setup work
-    prefs_log_dir = os.path.join(log_dir, "pref_interface")
-    pi = PrefInterface(max_segs=max_segs, log_dir=prefs_log_dir)
+    # prefs_log_dir = os.path.join(log_dir, "pref_interface")
+    pi = PrefInterface(max_segs=args.max_segs)
     proc = Process(target=f, daemon=True)
     proc.start()
     return pi, proc

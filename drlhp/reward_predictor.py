@@ -14,6 +14,9 @@ class CoreNetwork(nn.Module):
         self.fc1 = nn.Linear(input_dim, 64)
         self.fc2 = nn.Linear(64, 1)
 
+    def forward(self, input: torch.Tensor):
+        return self.fc2(self.fc1(input.float()))
+
 
 class RewardPredictorNetwork(nn.Module):
     """
@@ -64,7 +67,7 @@ class RewardPredictorNetwork(nn.Module):
         return torch.stack([sum_r1, sum_r2], dim=1)
 
     def get_reward(self, observation, state):
-        return self.core_network(torch.stack([observation, state], dim=1))
+        return self.core_network(torch.hstack([observation, state]))
 
 
 class RewardPredictorEnsemble(nn.Module):
@@ -80,11 +83,18 @@ class RewardPredictorEnsemble(nn.Module):
         self.optimizer = torch.optim.Adam(self.predictors.parameters(), lr=lr)
 
     def forward(self, s1, s2):
-        return torch.mean([predictor(s1, s2) for predictor in self.predictors], axis=0)
+        return torch.mean(
+            torch.Tensor([predictor(s1, s2) for predictor in self.predictors]), axis=0
+        )
 
     def get_reward(self, observation, state):
         return torch.mean(
-            [predictor.get_reward(observation, state) for predictor in self.predictors]
+            torch.Tensor(
+                [
+                    predictor.get_reward(observation, state)
+                    for predictor in self.predictors
+                ]
+            )
         )
 
     def train_one_epoch(self, prefs_train, prefs_val, val_interval):

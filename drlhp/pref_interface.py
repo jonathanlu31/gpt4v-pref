@@ -14,25 +14,17 @@ from random import shuffle
 # import easy_tf_log
 import numpy as np
 
-from utils import VideoRenderer
+from human_prefs import get_prefs
 from pref_db import Segment
 
 
 class PrefInterface:
     def __init__(self, max_segs, log_dir=None):
-        self.vid_q = Queue()
-        self.renderer = VideoRenderer(
-            vid_queue=self.vid_q, mode=VideoRenderer.restart_on_get_mode, zoom=4
-        )
         self.seg_idx = 0
         self.segments: list[Segment] = []
         self.tested_pairs = set()  # For O(1) lookup
-        # self.max_segs = max_segs
+        self.max_segs = max_segs
         # easy_tf_log.set_dir(log_dir)
-
-    def stop_renderer(self):
-        if self.renderer:
-            self.renderer.stop()
 
     def run(self, seg_pipe, pref_pipe):
         while len(self.segments) < 2:
@@ -60,16 +52,14 @@ class PrefInterface:
                 "Querying preference for segments %s and %s", s1.hash, s2.hash
             )
 
-            pref = self.ask_user(s1, s2)
+            pref = get_prefs(np.array(s1.frames), np.array(s2.frames))
 
             if pref is not None:
-                # We don't need the rewards from this point on, so just send
-                # the frames
-                pref_pipe.put((s1.frames, s2.frames, pref))
+                pref_pipe.put((s1, s2, pref))
             # If pref is None, the user answered "incomparable" for the segment
             # pair. The pair has been marked as tested; we just drop it.
 
-            # self.recv_segments(seg_pipe)
+            self.recv_segments(seg_pipe)
 
     def recv_segments(self, seg_pipe):
         """
@@ -94,7 +84,7 @@ class PrefInterface:
     # easy_tf_log.tflog('n_segments_rcvd', n_recvd)
     # easy_tf_log.tflog('n_segments', len(self.segments))
 
-    def sample_seg_pair(self):
+    def sample_seg_pair(self) -> tuple[Segment, Segment]:
         """
         Sample a random pair of segments which hasn't yet been tested.
         """
@@ -110,44 +100,3 @@ class PrefInterface:
                 self.tested_pairs.add((s2.hash, s1.hash))
                 return s1, s2
         raise IndexError("No segment pairs yet untested")
-
-    def ask_user(self, s1, s2):
-        vid = []
-        seg_len = len(s1)
-        for t in range(seg_len):
-            border = np.zeros((84, 10), dtype=np.uint8)
-            # -1 => show only the most recent frame of the 4-frame stack
-            frame = np.hstack((s1.frames[t][:, :, -1], border, s2.frames[t][:, :, -1]))
-            vid.append(frame)
-        n_pause_frames = 7
-
-        # TODO: document why
-        for _ in range(n_pause_frames):
-            vid.append(np.copy(vid[-1]))
-        self.vid_q.put(vid)
-
-        while True:
-            print("Segments {} and {}: ".format(s1.hash, s2.hash))
-            choice = input()
-            # L = "I prefer the left segment"
-            # R = "I prefer the right segment"
-            # E = "I don't have a clear preference between the two segments"
-            # "" = "The segments are incomparable"
-            if choice == "L" or choice == "R" or choice == "E" or choice == "":
-                break
-            else:
-                print("Invalid choice '{}'".format(choice))
-
-        if choice == "L":
-            pref = (1.0, 0.0)
-        elif choice == "R":
-            pref = (0.0, 1.0)
-        elif choice == "E":
-            pref = (0.5, 0.5)
-        elif choice == "":
-            pref = None
-
-        # TODO: why?
-        self.vid_q.put([np.zeros(vid[0].shape, dtype=np.uint8)])
-
-        return pref
