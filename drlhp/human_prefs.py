@@ -31,12 +31,13 @@ class VideoRenderer:
         blue = arr[:, :, :, 0].copy()
         arr[:, :, :, 0] = red
         arr[:, :, :, 2] = blue
+        cv2.imwrite("test.png", arr[0])
         for frame in range(arr.shape[0]):
             out.write(arr[frame])
         out.release()
-        pref = VideoRenderer.cv2_loop(VideoRenderer.TMP)
-        os.remove(VideoRenderer.TMP)
-        return pref
+        # pref = VideoRenderer.cv2_loop(VideoRenderer.TMP)
+        # os.remove(VideoRenderer.TMP)
+        # return pref
 
     @staticmethod
     def render_mp4(filename: str):

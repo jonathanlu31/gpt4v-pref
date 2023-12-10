@@ -8,6 +8,7 @@ import zlib
 from threading import Lock, Thread
 from multiprocessing import Queue
 from torch.utils.data import Dataset
+from collections import deque
 import torch
 
 # import easy_tf_log
@@ -21,11 +22,18 @@ class Segment:
     during those frames.
     """
 
+    max_len = None
+
+    @classmethod
+    def set_max_len(cls, max_len):
+        cls.max_len = max_len
+
     def __init__(self):
-        self.frames = []
-        self.rewards = []
-        self.observations = []
-        self.actions = []
+        assert Segment.max_len is not None, "Set segment length first"
+        self.frames = deque()
+        self.rewards = deque()
+        self.observations = deque()
+        self.actions = deque()
         self.hash = None
 
     def append(self, frame, reward, ob, act):
@@ -33,6 +41,12 @@ class Segment:
         self.rewards.append(reward)
         self.observations.append(ob)
         self.actions.append(act)
+
+        if len(self.rewards) > Segment.max_len:
+            self.frames.popleft()
+            self.rewards.popleft()
+            self.observations.popleft()
+            self.actions.popleft()
 
     def finalise(self, seg_id=None):
         if seg_id is not None:

@@ -116,6 +116,7 @@ def main(args):
     args = parse_args(args)
 
     set_random_seed(args.seed)
+    Segment.set_max_len(args.seg_length)
 
     run(args)
 
@@ -164,7 +165,7 @@ def start_training(
                 policy.learn(
                     args.train_steps_per_epoch,
                     callback=PretrainCallback(
-                        1000, seg_pipe, args.collect_seg_interval
+                        args.num_explore_steps, seg_pipe, args.collect_seg_interval
                     ),
                 )
             else:
