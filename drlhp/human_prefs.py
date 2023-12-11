@@ -27,10 +27,6 @@ class VideoRenderer:
             (size[1], size[0]),
             True,
         )
-        red = arr[:, :, :, 2].copy()
-        blue = arr[:, :, :, 0].copy()
-        arr[:, :, :, 0] = red
-        arr[:, :, :, 2] = blue
         cv2.imwrite("test.png", arr[0])
         for frame in range(arr.shape[0]):
             out.write(arr[frame])
@@ -98,7 +94,7 @@ class VideoRenderer:
         pygame.quit()
 
     @staticmethod
-    def render_two_np_array(arr1: np.ndarray, arr2: np.ndarray):
+    def combine_two_np_array(arr1: np.ndarray, arr2: np.ndarray):
         """Format: (num_frames x height x width x channels)"""
         new_height = max(arr1.shape[1], arr2.shape[1])
         new_frames = max(arr1.shape[0], arr2.shape[0])
@@ -131,7 +127,7 @@ class VideoRenderer:
 
         del padded_arr1
         del padded_arr2
-        return VideoRenderer.render_np_array(np.uint8(joint))
+        return np.uint8(joint)
 
     @staticmethod
     def mp4_to_np(filename: str):
@@ -140,9 +136,18 @@ class VideoRenderer:
         ), f"{filename.split('.')[-1]} not supported"
         return skvideo.io.vread(filename)
 
+    @staticmethod
+    def convert_np_to_cv2(np_frames):
+        red = np_frames[:, :, :, 2].copy()
+        blue = np_frames[:, :, :, 0].copy()
+        np_frames[:, :, :, 0] = red
+        np_frames[:, :, :, 2] = blue
+        return np_frames
+
 
 def get_prefs(arr1: np.ndarray, arr2: np.ndarray):
-    return VideoRenderer.render_two_np_array(arr1, arr2)
+    combined_frames = VideoRenderer.combine_two_np_array(arr1, arr2)
+    return VideoRenderer.render_np_array()
 
 
 class ImageRenderer:

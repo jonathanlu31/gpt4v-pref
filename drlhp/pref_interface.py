@@ -16,11 +16,13 @@ import numpy as np
 
 from human_prefs import get_prefs
 from pref_db import Segment
+from llm_prefs import GPT, PREFERENCE_PROMPT
 
 
 class PrefInterface:
-    def __init__(self, max_segs, log_dir=None):
+    def __init__(self, max_segs: int, use_human: bool = False, log_dir=None):
         self.seg_idx = 0
+        self.use_human = use_human
         self.segments: list[Segment] = []
         self.tested_pairs = set()  # For O(1) lookup
         self.max_segs = max_segs
@@ -52,7 +54,10 @@ class PrefInterface:
                 "Querying preference for segments %s and %s", s1.hash, s2.hash
             )
 
-            pref = get_prefs(np.array(s1.frames), np.array(s2.frames))
+            if self.use_human:
+                pref = get_prefs(np.array(s1.frames), np.array(s2.frames))
+            else:
+                pref = get_ai_pref(np.array(s1.frames), np.array(s2.frames))
 
             if pref is not None:
                 pref_pipe.put((s1, s2, pref))
@@ -100,3 +105,6 @@ class PrefInterface:
                 self.tested_pairs.add((s2.hash, s1.hash))
                 return s1, s2
         raise IndexError("No segment pairs yet untested")
+
+    def get_ai_prefs(self, s1_frames: np.ndarray, s2_frames: np.ndarray):
+        llm_output = GPT.query_img("test.png", PREFERENCE_PROMPT)
