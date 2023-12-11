@@ -10,45 +10,76 @@ from PIL import Image
 
 
 class VideoRenderer:
+
     DURATION = 5
-    TMP = "tmp.mp4"
+    TMP_MP4 = "tmp.mp4"
+    TMP_PNG = "tmp.png"
     SUPPORTED_FILE_TYPES = {"mp4", "gif"}
     WIDTH = 800
     HEIGHT = 600
 
     @staticmethod
     def render_np_array(arr: np.ndarray, is_img=False):
-        size = (arr.shape[1], arr.shape[2])
-        fps = arr.shape[0] // VideoRenderer.DURATION
-        out = cv2.VideoWriter(
-            VideoRenderer.TMP,
-            cv2.VideoWriter_fourcc(*"mp4v"),
-            fps,
-            (size[1], size[0]),
-            True,
-        )
-        cv2.imwrite("test.png", arr[0])
-        for frame in range(arr.shape[0]):
-            out.write(arr[frame])
-        out.release()
-        # pref = VideoRenderer.cv2_loop(VideoRenderer.TMP)
-        # os.remove(VideoRenderer.TMP)
-        # return pref
+        cv2_arr = VideoRenderer.convert_np_to_cv2(arr)
+        if is_img:
+            cv2.imwrite(VideoRenderer.TMP_PNG, cv2_arr[0])
+            pref = VideoRenderer.display_img(VideoRenderer.TMP_PNG)
+            os.remove(VideoRenderer.TMP_PNG)
+        else:
+            size = (arr.shape[1], arr.shape[2])
+            fps = arr.shape[0] // VideoRenderer.DURATION
+            out = cv2.VideoWriter(
+                VideoRenderer.TMP_MP4,
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (size[1], size[0]),
+                True,
+            )
+            for frame in range(arr.shape[0]):
+                out.write(cv2_arr[frame])
+            out.release()
+            pref = VideoRenderer.cv2_loop(VideoRenderer.TMP_MP4)
+            os.remove(VideoRenderer.TMP_MP4)
+        return pref
 
     @staticmethod
     def render_mp4(filename: str):
         pygame.init()
-        video = moviepy.editor.VideoFileClip(VideoRenderer.TMP)
+        video = moviepy.editor.VideoFileClip(VideoRenderer.TMP_MP4)
         video.preview()
         pygame.quit()
 
     @staticmethod
     def loop_mp4(filename: str, loop=3):
         pygame.init()
-        video = moviepy.editor.VideoFileClip(VideoRenderer.TMP)
+        video = moviepy.editor.VideoFileClip(VideoRenderer.TMP_MP4)
         video = video.loop(loop)
         video.preview()
         pygame.quit()
+
+    @staticmethod
+    def display_img(filename: str):
+        pygame.init()
+        running = True
+        img = pygame.image.load(filename)
+        img = pygame.transform.scale(img, (VideoRenderer.WIDTH, VideoRenderer.HEIGHT))
+        screen = pygame.display.set_mode(
+                (VideoRenderer.WIDTH, VideoRenderer.HEIGHT)
+            )
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
+                        pygame.quit()
+                        return -1
+                    elif event.key == pygame.K_RIGHT:
+                        pygame.quit()
+                        return 1
+                    elif event.key == pygame.K_RETURN:
+                        pygame.quit()
+                        return 0
+                screen.blit(img, (0, 0))
+                pygame.display.update()
 
     @staticmethod
     def cv2_loop(filename: str):
@@ -109,7 +140,7 @@ class VideoRenderer:
                 (0, 0),
                 (0, 0),
             ),
-            constant_values=0,
+            constant_values=(0, 0),
         )
         padded_arr2 = np.pad(
             arr2,
@@ -145,14 +176,14 @@ class VideoRenderer:
         return np_frames
 
 
-def get_prefs(arr1: np.ndarray, arr2: np.ndarray):
+def get_prefs(arr1: np.ndarray, arr2: np.ndarray, is_img=False):
     combined_frames = VideoRenderer.combine_two_np_array(arr1, arr2)
-    return VideoRenderer.render_np_array()
+    return VideoRenderer.render_np_array(combined_frames, is_img=is_img)
 
 
 class ImageRenderer:
     @staticmethod
-    def preprocess(img: np.ndarray, frames=20):
+    def preprocess(img: np.ndarray, frames=1):
         unsqueezed = np.expand_dims(img[:, :, 0:3], axis=0)
         out = unsqueezed
         for _ in range(frames - 1):
@@ -178,9 +209,11 @@ if __name__ == "__main__":
     while True:
         if np.random.rand() < 0.5:
             videodata1, videodata2 = vid_ex()
+            is_img = False
         else:
             videodata1, videodata2 = img_ex()
+            is_img = True
         if np.random.rand() < 0.5:
-            print(get_prefs(videodata1, videodata2))
+            print(get_prefs(videodata1, videodata2, is_img=is_img))
         else:
-            print(get_prefs(videodata2, videodata1))
+            print(get_prefs(videodata2, videodata1, is_img=is_img))

@@ -4,12 +4,12 @@ import requests
 import cv2
 import os
 from dotenv import load_dotenv
+from human_prefs import VideoRenderer, ImageRenderer
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
 PREFERENCE_PROMPT = """You are an expert in the English language. I will give you $100 if you get this correct. This is an image of two lines on a checkboard background. Which of the two lines looks more like an A. They both probably won't look much like the letter but give your best judgement. I believe in you. Output a single answer: LEFT or RIGHT."""
-
 
 class GPT:
     KEY = os.environ.get("KEY")
@@ -107,14 +107,44 @@ class GPT:
         vid.release()
         return b64frames
 
+    @staticmethod
+    def combine_and_query(path1: str, path2: str, query=None):
+        arr1, arr2 = ImageRenderer.file_to_np(path1), ImageRenderer.file_to_np(path2)
+        combined = VideoRenderer.combine_two_np_array(arr1, arr2)
+        cv2_arr = VideoRenderer.convert_np_to_cv2(combined)
+        cv2.imwrite(VideoRenderer.TMP_PNG, combined[0])
+        if query:
+            pref = GPT.query_img_preferences(
+                VideoRenderer.TMP_PNG,
+                query=query,
+            )
+        else:
+            pref = GPT.query_img_preferences(
+                VideoRenderer.TMP_PNG,
+            )
+        os.remove(VideoRenderer.TMP_PNG)
+        return pref
 
 if __name__ == "__main__":
+
+
+    img1 = 'Brahms_Lutoslawski_Final.png'
+    img2 = 'vlm.png'
+
     print(
-        GPT.query_img_preferences(
-            "test.png",
+        GPT.combine_and_query(
+            img1,
+            img1,
             query=PREFERENCE_PROMPT,
         )
     )
+
+    # print(
+    #     GPT.query_img_preferences(
+    #         "test.png",
+    #         query=PREFERENCE_PROMPT,
+    #     )
+    # )
     # print(GPT.query_images('Brahms_Lutoslawski_Final.png', 'vlm.png'))
     # print(GPT.query_images('drlhp/test.png', 'drlhp/test copy.png'))
     # print(GPT.query_videos('vid.mp4', 'taco-tues.gif'))
