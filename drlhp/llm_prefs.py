@@ -29,22 +29,24 @@ class GPT:
         path1: str,
         path2: str = None,
         query="What are in these images? Is there any difference between them?",
+        bytes1: str = None,
+        bytes2: str = None,
     ):
         msg_content = [
             {"type": "text", "text": query},
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/jpeg;base64,{GPT._encode_img(path1)}"
+                    "url": f"data:image/jpeg;base64,{bytes1 or GPT._encode_img(path1)}"
                 },
             },
         ]
-        if path2:
+        if path2 or bytes2:
             msg_content.append(
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{GPT._encode_img(path2)}"
+                        "url": f"data:image/jpeg;base64,{bytes2 or GPT._encode_img(path2)}"
                     },
                 }
             )
@@ -112,17 +114,21 @@ class GPT:
         arr1, arr2 = ImageRenderer.file_to_np(path1), ImageRenderer.file_to_np(path2)
         combined = VideoRenderer.combine_two_np_array(arr1, arr2)
         cv2_arr = VideoRenderer.convert_np_to_cv2(combined)
-        cv2.imwrite(VideoRenderer.TMP_PNG, combined[0])
+        # cv2.imwrite(VideoRenderer.TMP_PNG, cv2_arr[0])
+        success, buffer = cv2.imencode('.png', cv2_arr[0])
+        img_bytes = base64.b64encode(buffer).decode("utf-8")
         if query:
             pref = GPT.query_img_preferences(
                 VideoRenderer.TMP_PNG,
                 query=query,
+                bytes1=img_bytes
             )
         else:
             pref = GPT.query_img_preferences(
                 VideoRenderer.TMP_PNG,
+                bytes1=img_bytes
             )
-        os.remove(VideoRenderer.TMP_PNG)
+        # os.remove(VideoRenderer.TMP_PNG)
         return pref
 
 if __name__ == "__main__":
