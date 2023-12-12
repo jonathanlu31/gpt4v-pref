@@ -49,12 +49,6 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         default=1,
         help="Number of times the reward training runs through the preference db every full training loop",
     )
-    parser.add_argument(
-        "--reward-model-val-interval",
-        type=int,
-        default=200,
-        help="Number of steps taken during reward training before running validation",
-    )
 
 
 def add_policy_args(parser: ArgumentParser) -> None:
@@ -90,7 +84,7 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
         help="Length of each segment collected for ratin",
     )
     parser.add_argument("--max-prefs", type=int, default=500)
-    parser.add_argument("--max-segs", type=int, default=20)
+    parser.add_argument("--max-segs", type=int, default=100)
 
 
 def add_general_args(parser: ArgumentParser):

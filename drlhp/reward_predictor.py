@@ -89,7 +89,6 @@ class RewardPredictorEnsemble(nn.Module):
         self.predictors = nn.ModuleList(
             [RewardPredictorNetwork(ob_dim, ac_dim) for _ in range(num_predictors)]
         )
-        self.n_steps = 0
         self.bs = batch_size
         self.optimizer = torch.optim.Adam(self.predictors.parameters(), lr=lr)
 
@@ -126,7 +125,7 @@ class RewardPredictorEnsemble(nn.Module):
             )
         )
 
-    def train_one_epoch(self, prefs_train, prefs_val, val_interval):
+    def train_one_epoch(self, prefs_train, prefs_val):
         """
         Train all ensemble members for one epoch.
         """
@@ -135,7 +134,7 @@ class RewardPredictorEnsemble(nn.Module):
             % (len(prefs_train), len(prefs_val))
         )
 
-        start_steps = self.n_steps
+        total_steps = 0
         start_time = time.time()
         train_dataloader = DataLoader(prefs_train, self.bs, shuffle=True)
 
@@ -143,18 +142,16 @@ class RewardPredictorEnsemble(nn.Module):
             self.optimizer.zero_grad()
             network_pref = self(s1, s2)
             loss = F.cross_entropy(network_pref, pref)
-            
+
             loss.backward()
             self.optimizer.step()
 
-            self.n_steps += 1
+            total_steps += 1
 
-            if self.n_steps and self.n_steps % val_interval == 0:
-                self.val_step(prefs_val)
+        self.val_step(prefs_val)
 
         end_time = time.time()
-        end_steps = self.n_steps
-        rate = (end_steps - start_steps) / (end_time - start_time)
+        rate = (total_steps) / (end_time - start_time)
         # easy_tf_log.tflog('reward_predictor_training_steps_per_second',
         #                   rate)
 
@@ -176,7 +173,7 @@ class RewardPredictorEnsemble(nn.Module):
                     network_predictions[inverted_mask] == labels
                 ) / len(labels)
 
-                with open("metrics.txt", 'a') as f:
+                with open("metrics.txt", "a") as f:
                     f.write(f"Loss: {loss} ---- Accuracy: {accuracy}\n")
 
                 # log validation loss

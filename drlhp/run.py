@@ -173,7 +173,9 @@ def start_training(
     torch.set_default_dtype(torch.float32)
     Segment.set_max_len(args.seg_length)
     env = CustomEnv(args)
-    policy = PPO("MlpPolicy", env, verbose=1, device=device)
+    policy = PPO(
+        "MlpPolicy", env, verbose=1, device=device, tensorboard_log="./ppo_runs/"
+    )
 
     # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
     # os.makedirs(ckpt_dir)
@@ -200,19 +202,23 @@ def start_training(
                     args.collect_seg_interval,
                     args.save_interval,
                 ),
+                reset_num_timesteps=False,
             )
         else:
-            policy.learn(args.train_steps_per_epoch)
+            policy.learn(
+                args.train_steps_per_epoch, reset_num_timesteps=False, progress_bar=True
+            )
 
         # pref_buffer.stop_recv_thread()
-        # pref_db_train.save("train_preferences.pkl")
-        # pref_db_val.save("val_preferences.pkl")
+        pref_db_train.save("train_preferences.pkl")
+        pref_db_val.save("val_preferences.pkl")
 
-        for i in tqdm.trange(args.num_reward_epochs_per_epoch, dynamic_ncols=True):
+        for i in tqdm.trange(
+            args.num_reward_epochs_per_epoch, dynamic_ncols=True, progress_bar=True
+        ):
             env.reward_predictor.train_one_epoch(
                 copy.deepcopy(pref_db_train),
                 copy.deepcopy(pref_db_val),
-                args.reward_model_val_interval,
             )
 
 
