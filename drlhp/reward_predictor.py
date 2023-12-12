@@ -156,6 +156,9 @@ class RewardPredictorEnsemble(nn.Module):
         #                   rate)
 
     def val_step(self, prefs_val):
+        if len(prefs_val) == 0:
+            return
+
         val_dataloader = DataLoader(prefs_val, self.bs, shuffle=True)
 
         with torch.no_grad():
