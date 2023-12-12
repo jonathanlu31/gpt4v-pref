@@ -170,7 +170,7 @@ class RewardPredictorEnsemble(nn.Module):
                 labels = pref[inverted_mask]
 
                 accuracy = torch.count_nonzero(
-                    network_predictions[inverted_mask] == labels
+                    network_predictions[inverted_mask] == torch.argmax(labels, dim=1)
                 ) / len(labels)
 
                 with open("metrics.txt", "a") as f:

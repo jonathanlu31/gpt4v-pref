@@ -203,6 +203,7 @@ def start_training(
                     args.save_interval,
                 ),
                 reset_num_timesteps=False,
+                progress_bar=True
             )
         else:
             policy.learn(
@@ -214,7 +215,7 @@ def start_training(
         pref_db_val.save("val_preferences.pkl")
 
         for i in tqdm.trange(
-            args.num_reward_epochs_per_epoch, dynamic_ncols=True, progress_bar=True
+            args.num_reward_epochs_per_epoch, dynamic_ncols=True
         ):
             env.reward_predictor.train_one_epoch(
                 copy.deepcopy(pref_db_train),
