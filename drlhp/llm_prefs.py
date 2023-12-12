@@ -5,11 +5,14 @@ import cv2
 import os
 from dotenv import load_dotenv
 from human_prefs import VideoRenderer, ImageRenderer
+import numpy as np
+from typing import Literal
 
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
 PREFERENCE_PROMPT = """You are an expert in the English language. I will give you $100 if you get this correct. This is an image of two lines on a checkboard background. Which of the two lines looks more like an A. They both probably won't look much like the letter but give your best judgement. I believe in you. Output a single answer: LEFT or RIGHT."""
+
 
 class GPT:
     KEY = os.environ.get("KEY")
@@ -28,7 +31,7 @@ class GPT:
     def query_img_preferences(
         path1: str,
         path2: str = None,
-        query="What are in these images? Is there any difference between them?",
+        query=PREFERENCE_PROMPT,
         bytes1: str = None,
         bytes2: str = None,
     ):
@@ -37,7 +40,8 @@ class GPT:
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/jpeg;base64,{bytes1 or GPT._encode_img(path1)}"
+                    "url": f"data:image/jpeg;base64,{bytes1 or GPT._encode_img(path1)}",
+                    "detail": "low",
                 },
             },
         ]
@@ -46,7 +50,8 @@ class GPT:
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/jpeg;base64,{bytes2 or GPT._encode_img(path2)}"
+                        "url": f"data:image/jpeg;base64,{bytes2 or GPT._encode_img(path2)}",
+                        "detail": "low",
                     },
                 }
             )
@@ -56,11 +61,13 @@ class GPT:
             max_tokens=300,
         )
         pref = response.choices[0].message.content
+        print(pref)
+        print(response.usage.total_tokens)
         # TODO: log the full content as well for debugging if we decide to use step-by-step reasoning
         return GPT.pref_to_int(pref)
 
     @staticmethod
-    def pref_to_int(pref: str):
+    def pref_to_int(pref: str) -> Literal[-1, 1, 0, None]:
         # assert pref in GPT.CHOICES, f'LLM responded with "{pref}", which is not a valid response'
         if "LEFT" in pref or "FIRST" in pref:
             return -1
@@ -110,37 +117,32 @@ class GPT:
         return b64frames
 
     @staticmethod
-    def combine_and_query(path1: str, path2: str, query=None):
-        arr1, arr2 = ImageRenderer.file_to_np(path1), ImageRenderer.file_to_np(path2)
+    def combine_and_query(arr1: np.ndarray, arr2: np.ndarray, query=PREFERENCE_PROMPT):
         combined = VideoRenderer.combine_two_np_array(arr1, arr2)
         cv2_arr = VideoRenderer.convert_np_to_cv2(combined)
-        # cv2.imwrite(VideoRenderer.TMP_PNG, cv2_arr[0])
-        success, buffer = cv2.imencode('.png', cv2_arr[0])
+        cv2.imwrite(VideoRenderer.TMP_PNG, cv2_arr[0])
+        success, buffer = cv2.imencode(".png", cv2_arr[0])
         img_bytes = base64.b64encode(buffer).decode("utf-8")
         if query:
             pref = GPT.query_img_preferences(
-                VideoRenderer.TMP_PNG,
-                query=query,
-                bytes1=img_bytes
+                VideoRenderer.TMP_PNG, query=query, bytes1=img_bytes
             )
         else:
-            pref = GPT.query_img_preferences(
-                VideoRenderer.TMP_PNG,
-                bytes1=img_bytes
-            )
+            pref = GPT.query_img_preferences(VideoRenderer.TMP_PNG, bytes1=img_bytes)
         # os.remove(VideoRenderer.TMP_PNG)
         return pref
 
+
 if __name__ == "__main__":
+    path1 = "test.png"
+    path2 = "test copy.png"
 
-
-    img1 = 'Brahms_Lutoslawski_Final.png'
-    img2 = 'vlm.png'
+    arr1, arr2 = ImageRenderer.file_to_np(path1), ImageRenderer.file_to_np(path2)
 
     print(
         GPT.combine_and_query(
-            img1,
-            img1,
+            arr1,
+            arr2,
             query=PREFERENCE_PROMPT,
         )
     )

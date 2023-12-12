@@ -14,7 +14,7 @@ def parse_args(args) -> Namespace:
 
 def add_reward_predictor_args(parser: ArgumentParser) -> None:
     parser.add_argument(
-        "--include_actions",
+        "--include-actions",
         action="store_true",
         help="Flag to include actions in the reward predictions or just the observations",
         default="false",
@@ -37,6 +37,24 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         default=1,
         help="Number of reward predictors in the ensemble",
     )
+    parser.add_argument(
+        "--reward-model-checkpoint-path",
+        type=str,
+        default="reward_model.pkl",
+        help="Path to save the best reward model",
+    )
+    parser.add_argument(
+        "--num-reward-epochs-per-epoch",
+        type=int,
+        default=1,
+        help="Number of times the reward training runs through the preference db every full training loop",
+    )
+    parser.add_argument(
+        "--reward-model-val-interval",
+        type=int,
+        default=200,
+        help="Number of steps taken during reward training before running validation",
+    )
 
 
 def add_policy_args(parser: ArgumentParser) -> None:
@@ -47,13 +65,14 @@ def add_policy_args(parser: ArgumentParser) -> None:
         help="Learning rate for the policy agent",
     )
     parser.add_argument(
-        "--train_steps_per_epoch",
+        "--train-steps-per-epoch",
         type=int,
-        default=1e6,
+        default=5e5,
         help="Number of training steps every epoch for the model.learn call",
     )
     parser.add_argument("--num-epochs", type=int, default=1)
-    parser.add_argument("--num-explore-steps", type=int, default=10000)
+    parser.add_argument("--num-explore-steps", type=int, default=1000)
+    parser.add_argument("--save-interval", type=int, default=1e6)
 
 
 def add_preference_arguments(parser: ArgumentParser) -> None:
@@ -65,7 +84,7 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
         help="How often to collect segments along the policy rollouts",
     )
     parser.add_argument(
-        "--seg_length",
+        "--seg-length",
         type=int,
         default=1,
         help="Length of each segment collected for ratin",

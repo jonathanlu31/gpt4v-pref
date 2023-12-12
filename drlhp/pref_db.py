@@ -62,7 +62,7 @@ class Segment:
         i.e. [num_timesteps x (ob_dim + ac_dim)]
         """
         ob_acts = zip(self.observations, self.actions)
-        ob_acts_np = np.array([np.stack([ob, ac], axis=1) for ob, ac in ob_acts])
+        ob_acts_np = np.array([np.hstack([ob, ac]) for ob, ac in ob_acts])
         return ob_acts_np
 
     def __len__(self):

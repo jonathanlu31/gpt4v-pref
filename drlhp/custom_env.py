@@ -22,6 +22,7 @@ class CustomEnv(gym.Env):
             self.action_space.shape,
             args.reward_learning_rate,
             args.rwd_mdl_bs,
+            args.reward_model_checkpoint_path,
         )
         self.observations = []
         self.actions = []

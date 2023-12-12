@@ -38,7 +38,6 @@ class RewardPredictorNetwork(nn.Module):
         self.ob_dim = ob_dim
         self.ac_dim = ac_dim
         self.core_network = CoreNetwork(ob_dim[0] + ac_dim[0])
-        self.epoch = 100
 
         # self.dropout = dropout
         # self.batchnorm = batchnorm
@@ -58,13 +57,18 @@ class RewardPredictorNetwork(nn.Module):
             torch.Tensor: Summed logits of ratings from reward network
         """
         seg_len = s1.shape[1]
-        r1 = torch.Tensor([self.core_network(s1[:, i, :]) for i in range(seg_len)])
-        r2 = torch.Tensor([self.core_network(s2[:, i, :]) for i in range(seg_len)])
+
+        r1 = torch.vstack(
+            [self.core_network(s1[:, i, :]) for i in range(seg_len)]
+        ).reshape((s1.shape[0], seg_len))
+        r2 = torch.vstack(
+            [self.core_network(s2[:, i, :]) for i in range(seg_len)]
+        ).reshape((s1.shape[0], seg_len))
 
         sum_r1 = torch.sum(r1, dim=1)
         sum_r2 = torch.sum(r2, dim=1)
 
-        return torch.stack([sum_r1, sum_r2], dim=1)
+        return torch.hstack([sum_r1, sum_r2])
 
     def get_reward(self, observation, state):
         return self.core_network(torch.hstack([observation, state]))
@@ -72,9 +76,16 @@ class RewardPredictorNetwork(nn.Module):
 
 class RewardPredictorEnsemble(nn.Module):
     def __init__(
-        self, num_predictors: int, ob_dim: int, ac_dim: int, lr: float, batch_size: int
+        self,
+        num_predictors: int,
+        ob_dim: int,
+        ac_dim: int,
+        lr: float,
+        batch_size: int,
+        checkpoint_path: str,
     ):
         super().__init__()
+        self.num_predictors = num_predictors
         self.predictors = nn.ModuleList(
             [RewardPredictorNetwork(ob_dim, ac_dim) for _ in range(num_predictors)]
         )
@@ -82,9 +93,27 @@ class RewardPredictorEnsemble(nn.Module):
         self.bs = batch_size
         self.optimizer = torch.optim.Adam(self.predictors.parameters(), lr=lr)
 
+        self.best_accuracy = 0
+        self.checkpoint_path = checkpoint_path
+
     def forward(self, s1, s2):
+        """_summary_
+
+        Args:
+            s1 (_type_): _description_
+            s2 (_type_): _description_
+
+        predictor outputs: (batch, 2)
+        Stacked: (num_predictors, batch, 2)
+
+        Returns:
+            torch.Tensor: (2,)
+        """
         return torch.mean(
-            torch.Tensor([predictor(s1, s2) for predictor in self.predictors]), axis=0
+            torch.vstack([predictor(s1, s2) for predictor in self.predictors]).reshape(
+                (self.num_predictors, s1.shape[0], 2)
+            ),
+            axis=0,
         )
 
     def get_reward(self, observation, state):
@@ -149,3 +178,7 @@ class RewardPredictorEnsemble(nn.Module):
 
                 # log validation loss
                 # log accuracy
+                # TODO: checkpoint model if it's better than previous accuracy
+                if accuracy > self.best_accuracy:
+                    torch.save(self.state_dict(), self.checkpoint_path)
+                    self.best_accuracy = accuracy

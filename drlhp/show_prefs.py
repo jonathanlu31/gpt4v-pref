@@ -7,13 +7,12 @@ and the more-preferred segment on the right)
 """
 
 import argparse
-import gzip
-import pickle
-from multiprocessing import Queue
 
 import numpy as np
 
-from utils import VideoRenderer
+from human_prefs import VideoRenderer
+from pref_db import PrefDB
+import cv2
 
 
 def main():
@@ -21,42 +20,31 @@ def main():
     parser.add_argument("prefs", help=".pkl.gz file")
     args = parser.parse_args()
 
-    with gzip.open(args.prefs, "rb") as pkl_file:
-        print("Loading preferences from '{}'...".format(args.prefs), end="")
-        prefs = pickle.load(pkl_file)
-        print("done!")
+    prefs = PrefDB.load(args.prefs)
 
     print("{} preferences found".format(len(prefs)))
     print("Preferred segment on the right")
 
-    q = Queue()
-    VideoRenderer(q, zoom=2, mode=VideoRenderer.restart_on_get_mode)
-
     for k1, k2, pref in prefs.prefs:
+        s1, s2 = prefs.segments[k1], prefs.segments[k2]
         if pref == (0.5, 0.5):
             continue
 
         if pref == (0.0, 1.0):
-            s1 = np.array(prefs.segments[k1])
-            s2 = np.array(prefs.segments[k2])
+            img = VideoRenderer.combine_two_np_array(
+                np.array(s1.frames), np.array(s2.frames)
+            )
         elif pref == (1.0, 0.0):
-            s1 = np.array(prefs.segments[k2])
-            s2 = np.array(prefs.segments[k1])
+            img = VideoRenderer.combine_two_np_array(
+                np.array(s2.frames), np.array(s1.frames)
+            )
         else:
             raise Exception("Unexpected preference", pref)
 
-        vid = []
-        border = np.ones((84, 10), dtype=np.uint8) * 128
-        for t in range(len(s1)):
-            # -1 => select the last frame in the 4-frame stack
-            f1 = s1[t, :, :, -1]
-            f2 = s2[t, :, :, -1]
-            frame = np.hstack((f1, border, f2))
-            vid.append(frame)
-        n_pause_frames = 10
-        for _ in range(n_pause_frames):
-            vid.append(np.copy(vid[-1]))
-        q.put(vid)
+        cv2_img = VideoRenderer.convert_np_to_cv2(img)
+        cv2.imshow("Preference (right is right)", cv2_img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
         input()
 
 

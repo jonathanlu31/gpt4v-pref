@@ -3,19 +3,21 @@ import torch
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EveryNTimesteps
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.results_plotter import load_results, ts2xy
 import tqdm
 
 import numpy as np
 import random
 import sys
-from multiprocessing import Process, Queue
+from torch.multiprocessing import Process, Queue
 import os
+import copy
 
 from custom_env import CustomEnv
 from params import parse_args
 
 from pref_interface import PrefInterface
-from reward_predictor import RewardPredictorNetwork
+from reward_predictor import RewardPredictorEnsemble
 from pref_db import PrefDB, PrefBuffer, Segment
 
 
@@ -32,7 +34,14 @@ class PretrainCallback(BaseCallback):
     :param verbose: Verbosity level: 0 for no output, 1 for info messages, 2 for debug messages
     """
 
-    def __init__(self, num_steps_explore, seg_pipe, collect_seg_interval, verbose=0):
+    def __init__(
+        self,
+        num_steps_explore,
+        seg_pipe,
+        collect_seg_interval,
+        save_interval,
+        verbose=1,
+    ):
         super().__init__(verbose)
         # Those variables will be accessible in the callback
         # (they are defined in the base class)
@@ -54,6 +63,12 @@ class PretrainCallback(BaseCallback):
         self.num_steps_explore = num_steps_explore
         self.collect_seg_interval = collect_seg_interval
         self.seg_pipe = seg_pipe
+
+        self.log_dir = os.path.dirname(__file__)
+
+        self.save_interval = save_interval
+        self.save_path = os.path.join(self.log_dir, "agent")
+        self.best_mean_reward = -float("inf")
 
     def _on_training_start(self) -> None:
         """
@@ -97,6 +112,8 @@ class PretrainCallback(BaseCallback):
 
         :return: (bool) If the callback returns False, training is aborted early.
         """
+        if self.num_timesteps % self.save_interval == 0:
+            self.model.save(self.save_path)
         return True
 
     def _on_rollout_end(self) -> None:
@@ -118,18 +135,30 @@ def main(args):
     set_random_seed(args.seed)
     Segment.set_max_len(args.seg_length)
 
-    run(args)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    run(args, device)
 
 
-def run(args):
+def run(args, device):
     seg_pipe = Queue(maxsize=1)
     pref_pipe = Queue(maxsize=1)
 
-    ppo_proc = start_training(args, True, seg_pipe, pref_pipe)
+    ppo_proc = Process(
+        target=start_training,
+        daemon=True,
+        args=(args, True, seg_pipe, pref_pipe, device),
+    )
+    ppo_proc.start()
 
-    pi, pi_proc = start_preference_labeling_process(args, seg_pipe, pref_pipe)
+    pi_proc = Process(
+        target=start_preference_labeling_process,
+        daemon=True,
+        args=(args, seg_pipe, pref_pipe),
+    )
+    pi_proc.start()
     ppo_proc.join()
-    # pi_proc.terminate()
+    pi_proc.terminate()
 
 
 def start_training(
@@ -137,66 +166,66 @@ def start_training(
     gen_segments: bool,
     seg_pipe: Queue,
     pref_pipe: Queue,
-    episode_vid_queue=None,
+    device,
     log_dir=None,
 ):
-    def f():
-        env = CustomEnv(args)
-        policy = PPO("MlpPolicy", env, verbose=1)
+    Segment.set_max_len(args.seg_length)
+    env = CustomEnv(args)
+    policy = PPO("MlpPolicy", env, verbose=1, device=device)
 
-        # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
-        # os.makedirs(ckpt_dir)
+    # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
+    # os.makedirs(ckpt_dir)
+    # misc_logs_dir = osp.join(log_dir, "a2c_misc")
 
-        # reward_predictor = RewardPredictorNetwork()
-        # misc_logs_dir = osp.join(log_dir, "a2c_misc")
+    n_train = args.max_prefs * (1 - args.prefs_val_fraction)
+    n_val = args.max_prefs * args.prefs_val_fraction
+    pref_db_train = PrefDB(maxlen=n_train)
+    pref_db_val = PrefDB(maxlen=n_val)
 
-        n_train = args.max_prefs * (1 - args.prefs_val_fraction)
-        n_val = args.max_prefs * args.prefs_val_fraction
-        pref_db_train = PrefDB(maxlen=n_train)
-        pref_db_val = PrefDB(maxlen=n_val)
+    pref_buffer = PrefBuffer(db_train=pref_db_train, db_val=pref_db_val)
+    pref_buffer.start_recv_thread(pref_pipe)
 
-        pref_buffer = PrefBuffer(db_train=pref_db_train, db_val=pref_db_val)
-        pref_buffer.start_recv_thread(pref_pipe)
+    for i in range(args.num_epochs):
+        # Have policy run for x number of steps first to collect some trajectories
+        # Then start the full process
+        print("Train epoch number: ", i)
+        if gen_segments:
+            policy.learn(
+                args.train_steps_per_epoch,
+                callback=PretrainCallback(
+                    args.num_explore_steps,
+                    seg_pipe,
+                    args.collect_seg_interval,
+                    args.save_interval,
+                ),
+            )
+        else:
+            policy.learn(args.train_steps_per_epoch)
 
-        for i in range(args.num_epochs):
-            # Have policy run for x number of steps first to collect some trajectories
-            # Then start the full process
-            if gen_segments:
-                policy.learn(
-                    args.train_steps_per_epoch,
-                    callback=PretrainCallback(
-                        args.num_explore_steps, seg_pipe, args.collect_seg_interval
-                    ),
-                )
-            else:
-                policy.learn(args.train_steps_per_epoch)
+        # pref_buffer.stop_recv_thread()
+        # pref_db_train.save("train_preferences.pkl")
+        # pref_db_val.save("val_preferences.pkl")
 
-            # for i in tqdm.trange(
-            #     args.num_reward_steps_per_epoch, dynamic_ncols=True
-            # ):
-            #     pref_batch = pref_buffer.sample()
-            #     reward_predictor.update()
-
-    proc = Process(target=f, daemon=True)
-    proc.start()
-    return proc
+        for i in tqdm.trange(args.num_reward_epochs_per_epoch, dynamic_ncols=True):
+            env.reward_predictor.train_one_epoch(
+                copy.deepcopy(pref_db_train),
+                copy.deepcopy(pref_db_val),
+                args.reward_model_val_interval,
+            )
 
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
-    def f():
-        # The preference interface needs to get input from stdin. stdin is
-        # automatically closed at the beginning of child processes in Python,
-        # so this is a bit of a hack, but it seems to be fine.
-        sys.stdin = os.fdopen(0)
-        pi.run(seg_pipe=seg_pipe, pref_pipe=pref_pipe)
-
     # Needs to be done in the main process because does GUI setup work
     # prefs_log_dir = os.path.join(log_dir, "pref_interface")
     pi = PrefInterface(max_segs=args.max_segs)
-    proc = Process(target=f, daemon=True)
-    proc.start()
-    return pi, proc
+
+    # The preference interface needs to get input from stdin. stdin is
+    # automatically closed at the beginning of child processes in Python,
+    # so this is a bit of a hack, but it seems to be fine.
+    sys.stdin = os.fdopen(0)
+    pi.run(seg_pipe=seg_pipe, pref_pipe=pref_pipe)
 
 
 if __name__ == "__main__":
+    torch.multiprocessing.set_start_method("spawn")
     main(sys.argv[1:])

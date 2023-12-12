@@ -57,7 +57,7 @@ class PrefInterface:
             if self.use_human:
                 pref = get_prefs(np.array(s1.frames), np.array(s2.frames))
             else:
-                pref = get_ai_prefs(np.array(s1.frames), np.array(s2.frames))
+                pref = GPT.combine_and_query(np.array(s1.frames), np.array(s2.frames))
 
             if pref is not None:
                 pref_pipe.put((s1, s2, pref))
@@ -105,8 +105,3 @@ class PrefInterface:
                 self.tested_pairs.add((s2.hash, s1.hash))
                 return s1, s2
         raise IndexError("No segment pairs yet untested")
-
-
-def get_ai_prefs(s1_frames: np.ndarray, s2_frames: np.ndarray):
-    single_img = VideoRenderer.combine_two_np_array(s1_frames, s2_frames)
-    llm_output = GPT.query_img_preferences(single_img, query=PREFERENCE_PROMPT)
