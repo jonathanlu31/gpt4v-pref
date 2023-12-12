@@ -55,7 +55,7 @@ class PrefInterface:
             )
 
             if self.use_human:
-                pref = get_prefs(np.array(s1.frames), np.array(s2.frames))
+                pref = get_prefs(np.array(s1.frames), np.array(s2.frames), is_img=True)
             else:
                 pref = GPT.combine_and_query(np.array(s1.frames), np.array(s2.frames))
 

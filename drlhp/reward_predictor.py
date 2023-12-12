@@ -143,7 +143,7 @@ class RewardPredictorEnsemble(nn.Module):
             self.optimizer.zero_grad()
             network_pref = self(s1, s2)
             loss = F.cross_entropy(network_pref, pref)
-
+            
             loss.backward()
             self.optimizer.step()
 
@@ -175,6 +175,9 @@ class RewardPredictorEnsemble(nn.Module):
                 accuracy = torch.count_nonzero(
                     network_predictions[inverted_mask] == labels
                 ) / len(labels)
+
+                with open("metrics.txt", 'a') as f:
+                    f.write(f"Loss: {loss} ---- Accuracy: {accuracy}\n")
 
                 # log validation loss
                 # log accuracy

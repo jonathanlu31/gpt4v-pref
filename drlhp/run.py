@@ -79,7 +79,7 @@ class PretrainCallback(BaseCallback):
         seg = Segment()
 
         for i in range(1, self.num_steps_explore + 1):
-            ac, _states = self.model.predict(obs)
+            ac, _states = self.model.predict(torch.from_numpy(obs).float())
             obs, rewards, done, trunc, info = base_env.step(ac)
 
             frame = base_env.render()
@@ -135,7 +135,8 @@ def main(args):
     set_random_seed(args.seed)
     Segment.set_max_len(args.seg_length)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps")
 
     run(args, device)
 
@@ -169,6 +170,7 @@ def start_training(
     device,
     log_dir=None,
 ):
+    torch.set_default_dtype(torch.float32)
     Segment.set_max_len(args.seg_length)
     env = CustomEnv(args)
     policy = PPO("MlpPolicy", env, verbose=1, device=device)
@@ -215,9 +217,10 @@ def start_training(
 
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
+    torch.set_default_dtype(torch.float32)
     # Needs to be done in the main process because does GUI setup work
     # prefs_log_dir = os.path.join(log_dir, "pref_interface")
-    pi = PrefInterface(max_segs=args.max_segs)
+    pi = PrefInterface(max_segs=args.max_segs, use_human=True)
 
     # The preference interface needs to get input from stdin. stdin is
     # automatically closed at the beginning of child processes in Python,
@@ -228,4 +231,5 @@ def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
 
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method("spawn")
+    torch.set_default_dtype(torch.float32)
     main(sys.argv[1:])

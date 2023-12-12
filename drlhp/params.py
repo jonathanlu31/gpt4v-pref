@@ -67,10 +67,10 @@ def add_policy_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--train-steps-per-epoch",
         type=int,
-        default=5e5,
+        default=4e3,
         help="Number of training steps every epoch for the model.learn call",
     )
-    parser.add_argument("--num-epochs", type=int, default=1)
+    parser.add_argument("--num-epochs", type=int, default=30)
     parser.add_argument("--num-explore-steps", type=int, default=1000)
     parser.add_argument("--save-interval", type=int, default=1e6)
 
@@ -80,7 +80,7 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--collect-seg-interval",
         type=int,
-        default=50,
+        default=100,
         help="How often to collect segments along the policy rollouts",
     )
     parser.add_argument(
@@ -89,8 +89,8 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
         default=1,
         help="Length of each segment collected for ratin",
     )
-    parser.add_argument("--max-prefs", type=int, default=30)
-    parser.add_argument("--max-segs", type=int, default=30)
+    parser.add_argument("--max-prefs", type=int, default=500)
+    parser.add_argument("--max-segs", type=int, default=20)
 
 
 def add_general_args(parser: ArgumentParser):
