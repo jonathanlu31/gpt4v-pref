@@ -1,6 +1,6 @@
 import logging
 import torch
-from stable_baselines3 import DQN, PPO
+from stable_baselines3 import DQN, PPO, SAC
 from stable_baselines3.common.callbacks import EveryNTimesteps
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.results_plotter import load_results, ts2xy
@@ -177,13 +177,17 @@ def start_training(
 
     wandb.init(
         # Set the project where this run will be logged
-        project="run_script_cartpole_llm",
+        project="run_script_walker_human_split",
         # Track hyperparameters and run metadata
     )
     torch.set_default_dtype(torch.float32)
     Segment.set_max_len(args.seg_length)
+    Segment.set_include_action(args.include_actions)
     env = CustomEnv(args)
-    policy = DQN("MlpPolicy", env, verbose=1, device=device)
+    if os.path.exists(args.pretrained_agent_path):
+        policy = SAC.load(args.pretrained_agent_path, env=env, device=device)
+    else:
+        policy = SAC("MlpPolicy", env, verbose=1, device=device)
 
     # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
     # os.makedirs(ckpt_dir)

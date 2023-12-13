@@ -23,10 +23,15 @@ class Segment:
     """
 
     max_len = None
+    include_action = None
 
     @classmethod
     def set_max_len(cls, max_len):
         cls.max_len = max_len
+
+    @classmethod
+    def set_include_action(cls, include_action):
+        cls.include_action = include_action
 
     def __init__(self):
         assert Segment.max_len is not None, "Set segment length first"
@@ -61,9 +66,12 @@ class Segment:
 
         i.e. [num_timesteps x (ob_dim + ac_dim)]
         """
-        ob_acts = zip(self.observations, self.actions)
-        ob_acts_np = np.array([np.hstack([ob, ac]) for ob, ac in ob_acts])
-        return ob_acts_np
+        assert Segment.include_action is not None
+        if Segment.include_action:
+            ob_acts = zip(self.observations, self.actions)
+            ob_acts_np = np.array([np.hstack([ob, ac]) for ob, ac in ob_acts])
+            return ob_acts_np
+        return np.array(self.observations)
 
     def __len__(self):
         return len(self.frames)

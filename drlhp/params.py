@@ -67,12 +67,13 @@ def add_policy_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--train-steps-per-epoch",
         type=int,
-        default=4e3,
+        default=1e3,
         help="Number of training steps every epoch for the model.learn call",
     )
     parser.add_argument("--num-epochs", type=int, default=30)
     parser.add_argument("--num-explore-steps", type=int, default=1000)
     parser.add_argument("--save-interval", type=int, default=1e6)
+    parser.add_argument("--pretrained-agent-path", type=str, default='')
 
 
 def add_preference_arguments(parser: ArgumentParser) -> None:

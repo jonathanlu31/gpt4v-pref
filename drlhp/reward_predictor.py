@@ -16,7 +16,9 @@ class CoreNetwork(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(64, 64),
             nn.LeakyReLU(),
-            nn.Linear(64, 16),
+            nn.Linear(64, 32),
+            nn.LeakyReLU(),
+            nn.Linear(32, 16),
             nn.LeakyReLU(),
             nn.Linear(16, 1),
         )
@@ -44,6 +46,7 @@ class RewardPredictorEnsemble(nn.Module):
         self,
         num_predictors: int,
         ob_dim: int,
+        include_actions: bool,
         ac_dim: int,
         lr: float,
         batch_size: int,
@@ -51,11 +54,16 @@ class RewardPredictorEnsemble(nn.Module):
     ):
         super().__init__()
         self.num_predictors = num_predictors
+        self.include_actions = include_actions
+        if self.include_actions:
+            input_dim = ob_dim[0] + ac_dim[0]
+        else:
+            input_dim = ob_dim[0]
         self.predictors = nn.ModuleList(
-            [CoreNetwork(ob_dim[0] + ac_dim[0]) for _ in range(num_predictors)]
+            [CoreNetwork(input_dim) for _ in range(num_predictors)]
         )
         self.bs = batch_size
-        self.optimizer = torch.optim.Adam(self.predictors.parameters(), lr=lr)
+        self.optimizer = torch.optim.AdamW(self.predictors.parameters(), lr=lr, weight_decay=6e-2)
 
         self.best_accuracy = 0
         self.checkpoint_path = checkpoint_path
@@ -103,10 +111,14 @@ class RewardPredictorEnsemble(nn.Module):
         )
 
     def get_reward(self, observation, action):
+        if self.include_actions:
+            pred_input = torch.hstack([observation, action])
+        else:
+            pred_input = observation
         return torch.mean(
             torch.Tensor(
                 [
-                    predictor(torch.hstack([observation, action]))
+                    predictor(pred_input)
                     for predictor in self.predictors
                 ]
             )
@@ -127,13 +139,24 @@ class RewardPredictorEnsemble(nn.Module):
         start_time = time.time()
         train_dataloader = DataLoader(prefs_train, self.bs, shuffle=True)
         total_train_loss = 0
+        total_train_accuracy = 0
         for s1, s2, pref in train_dataloader:
             self.optimizer.zero_grad()
             network_pref = self(s1, s2)
             loss = F.cross_entropy(network_pref, pref)
-            total_train_loss += loss
             loss.backward()
             self.optimizer.step()
+            total_train_loss += loss
+
+            network_predictions = torch.argmax(network_pref, dim=1)
+
+            mask = (pref == 0.5).any(dim=1)
+            inverted_mask = ~mask
+            labels = pref[inverted_mask]
+
+            total_train_accuracy += torch.count_nonzero(
+                network_predictions[inverted_mask] == torch.argmax(labels, dim=1)
+            ) / len(labels)
 
             total_steps += 1
 
@@ -145,6 +168,7 @@ class RewardPredictorEnsemble(nn.Module):
         if result is None:
             return {
                 "avg_train_loss": total_train_loss / total_steps,
+                "avg_train_acc": total_train_accuracy / total_steps,
             }
 
         val_loss, val_acc = result
@@ -153,6 +177,7 @@ class RewardPredictorEnsemble(nn.Module):
             "avg_train_loss": total_train_loss / total_steps,
             "avg_val_loss": val_loss,
             "avg_val_acc": val_acc,
+            "avg_train_acc": total_train_accuracy / total_steps,
         }
         # easy_tf_log.tflog('reward_predictor_training_steps_per_second',
         #                   rate)
