@@ -11,7 +11,9 @@ from typing import Literal
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(dotenv_path)
 
-PREFERENCE_PROMPT = """You are an expert in the English language. I will give you $100 if you get this correct. This is an image of two lines on a checkboard background. Which of the two lines looks more like an A. They both probably won't look much like the letter but give your best judgement. I believe in you. Output a single answer: LEFT or RIGHT."""
+SWIMMER_PROMPT = """You are an expert in the English language. This is an image of two lines on a checkboard background. Which of the two lines looks more like an A. They both probably won't look much like the letter but give your best judgement. I believe in you. Output a single answer: LEFT or RIGHT."""
+
+CARTPOLE_PROMPT = """You have been given two drawings of a square cart trying to balance a brown, wooden pole. Priority 1: The pole should be as close to vertical as possible, perpendicular to the ground. Priority 2: the cart should be centered in its respective frame. Pick the image (LEFT or RIGHT) that best satisfies these priorities. They both might bad at balancing the pole but give your best judgement. Output a single answer: LEFT or RIGHT."""
 
 
 class GPT:
@@ -29,9 +31,9 @@ class GPT:
 
     @staticmethod
     def query_img_preferences(
-        path1: str,
+        path1: str = None,
         path2: str = None,
-        query=PREFERENCE_PROMPT,
+        query=None,
         bytes1: str = None,
         bytes2: str = None,
     ):
@@ -117,25 +119,97 @@ class GPT:
         return b64frames
 
     @staticmethod
-    def combine_and_query(arr1: np.ndarray, arr2: np.ndarray, query=PREFERENCE_PROMPT):
-        combined = VideoRenderer.combine_two_np_array(arr1, arr2)
-        cv2_arr = VideoRenderer.convert_np_to_cv2(combined)
-        cv2.imwrite(VideoRenderer.TMP_PNG, cv2_arr[0])
-        success, buffer = cv2.imencode(".png", cv2_arr[0])
-        img_bytes = base64.b64encode(buffer).decode("utf-8")
-        if query:
-            pref = GPT.query_img_preferences(
-                VideoRenderer.TMP_PNG, query=query, bytes1=img_bytes
-            )
-        else:
-            pref = GPT.query_img_preferences(VideoRenderer.TMP_PNG, bytes1=img_bytes)
-        # os.remove(VideoRenderer.TMP_PNG)
+    def query_two_imgs(arr1, arr2, query):
+        # drawline(VideoRenderer.convert_np_to_cv2(arr1)[0], thickness=3, style='dotted')
+        # drawline(VideoRenderer.convert_np_to_cv2(arr2)[0], thickness=3, style='dotted')
+        arr1_cv2 = VideoRenderer.convert_np_to_cv2(arr1)
+        arr2_cv2 = VideoRenderer.convert_np_to_cv2(arr2)
+        success, buff1 = cv2.imencode(".png", arr1_cv2[0])
+        success, buff2 = cv2.imencode(".png", arr2_cv2[0])
+        img_bytes1 = base64.b64encode(buff1).decode("utf-8")
+        img_bytes2 = base64.b64encode(buff2).decode("utf-8")
+        pref = GPT.query_img_preferences(
+            bytes1=img_bytes1, bytes2=img_bytes2, query=query
+        )
         return pref
+
+    @staticmethod
+    def combine_and_query(arr1: np.ndarray, arr2: np.ndarray, query):
+        # drawline(VideoRenderer.convert_np_to_cv2(arr1)[0], thickness=3, style='dotted')
+        combined = VideoRenderer.combine_two_np_array(arr1, arr2)
+        combined_cv = VideoRenderer.convert_np_to_cv2(combined)
+        # drawline(VideoRenderer.convert_np_to_cv2(arr2)[0], thickness=3, style='dotted')
+        cv2_w_line = add_line(combined_cv[0], color=(0, 0, 255))
+        cv2.imwrite(VideoRenderer.TMP_PNG, cv2_w_line)
+        success, buffer = cv2.imencode(".png", cv2_w_line)
+        img_bytes = base64.b64encode(buffer).decode("utf-8")
+        pref = GPT.query_img_preferences(
+            VideoRenderer.TMP_PNG, query=query, bytes1=img_bytes
+        )
+
+        # combined = VideoRenderer.combine_two_np_array(arr2, arr1)
+        # cv2_w_line = add_line(combined[0], color=(0, 0, 0))
+        # success, buffer = cv2.imencode(".png", cv2_w_line)
+        # img_bytes = base64.b64encode(buffer).decode("utf-8")
+
+        # pref2 = GPT.query_img_preferences(
+        #     VideoRenderer.TMP_PNG, query=query, bytes1=img_bytes
+        # )
+        # if pref != pref2:
+        #     cv2.imwrite(VideoRenderer.TMP_PNG, cv2_w_line)
+        #     print("Match predictions:", pref2)
+        #     return pref
+        # print("Didn't match:", pref)
+        return pref
+        # os.remove(VideoRenderer.TMP_PNG)
+        # return pref
+
+
+def add_line(img: str, color=(0, 0, 255), thickness=5):
+    # img = cv2.imread(path)
+    height, width = img.shape[:2]
+    new_img = cv2.line(img, (width // 2, height), (width // 2, 0), color, thickness)
+    return new_img
+    # out = path.split('.')
+    # out.insert(-1, '-line')
+    # out[-1] = '.' + out[-1]
+    # out_path = ''.join(out)
+    # cv2.imwrite(out, new_img)
+    # return out
+
+
+def drawline(img, color=(0, 0, 255), thickness=3, style="dotted", gap=10):
+    height, width = img.shape[:2]
+    pt1 = (width // 2, height)
+    pt2 = (width // 2, 0)
+    dist = ((pt1[0] - pt2[0]) ** 2 + (pt1[1] - pt2[1]) ** 2) ** 0.5
+    pts = []
+    for i in np.arange(0, dist, gap):
+        r = i / dist
+        x = int((pt1[0] * (1 - r) + pt2[0] * r) + 0.5)
+        y = int((pt1[1] * (1 - r) + pt2[1] * r) + 0.5)
+        p = (x, y)
+        pts.append(p)
+
+    if style == "dotted":
+        for p in pts:
+            cv2.circle(img, p, thickness, color, -1)
+    else:
+        s = pts[0]
+        e = pts[0]
+        i = 0
+        for p in pts:
+            s = e
+            e = p
+            if i % 2 == 1:
+                cv2.line(img, s, e, color, thickness)
+            i += 1
+    # return img
 
 
 if __name__ == "__main__":
-    path1 = "test.png"
-    path2 = "test copy.png"
+    # path1 = "test.png"
+    # path2 = "test copy.png"
 
     arr1, arr2 = ImageRenderer.file_to_np(path1), ImageRenderer.file_to_np(path2)
 
@@ -143,8 +217,9 @@ if __name__ == "__main__":
         GPT.combine_and_query(
             arr1,
             arr2,
-            query=PREFERENCE_PROMPT,
+            query=CARTPOLE_PROMPT,
         )
+        # GPT.query_img_preferences(path1='tmp.png', query=CARTPOLE_PROMPT)
     )
 
     # print(

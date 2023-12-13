@@ -18,7 +18,7 @@ class CoreNetwork(nn.Module):
             nn.LeakyReLU(),
             nn.Linear(64, 16),
             nn.LeakyReLU(),
-            nn.Linear(16, 1)
+            nn.Linear(16, 1),
         )
 
     def forward(self, input: torch.Tensor):
@@ -39,6 +39,7 @@ class RewardPredictorEnsemble(nn.Module):
     - rs1/rs2   Reward summed over all frames for each trajectory
     - pred      Predicted preference
     """
+
     def __init__(
         self,
         num_predictors: int,
@@ -80,17 +81,26 @@ class RewardPredictorEnsemble(nn.Module):
         sum_s2 = torch.zeros(batch_size)
         s1, s2 = s1.float(), s2.float()
         for pred in self.predictors:
-            s1_reward = torch.sum(torch.vstack(
-                    [pred(s1[:, i, :]) for i in range(seg_len)]
-                ).reshape((s1.shape[0], seg_len)), dim=1)
-            s2_reward = torch.sum(torch.vstack(
-                    [pred(s2[:, i, :]) for i in range(seg_len)]
-                ).reshape((s1.shape[0], seg_len)), dim=1)
+            s1_reward = torch.sum(
+                torch.vstack([pred(s1[:, i, :]) for i in range(seg_len)]).reshape(
+                    (s1.shape[0], seg_len)
+                ),
+                dim=1,
+            )
+            s2_reward = torch.sum(
+                torch.vstack([pred(s2[:, i, :]) for i in range(seg_len)]).reshape(
+                    (s1.shape[0], seg_len)
+                ),
+                dim=1,
+            )
 
             sum_s1 += s1_reward
             sum_s2 += s2_reward
 
-        return torch.hstack([sum_s1.unsqueeze(1), sum_s2.unsqueeze(1)]) / self.num_predictors
+        return (
+            torch.hstack([sum_s1.unsqueeze(1), sum_s2.unsqueeze(1)])
+            / self.num_predictors
+        )
 
     def get_reward(self, observation, action):
         return torch.mean(
@@ -110,6 +120,8 @@ class RewardPredictorEnsemble(nn.Module):
             "Training/testing with %d/%d preferences"
             % (len(prefs_train), len(prefs_val))
         )
+        if len(prefs_train) == 0:
+            return
 
         total_steps = 0
         start_time = time.time()
@@ -125,15 +137,22 @@ class RewardPredictorEnsemble(nn.Module):
 
             total_steps += 1
 
-        val_loss, val_acc = self.val_step(prefs_val)
-
+        result = self.val_step(prefs_val)
+        self.num_epochs += 1
         end_time = time.time()
         rate = (total_steps) / (end_time - start_time)
-        self.num_epochs += 1
+
+        if result is None:
+            return {
+                "avg_train_loss": total_train_loss / total_steps,
+            }
+
+        val_loss, val_acc = result
+
         return {
             "avg_train_loss": total_train_loss / total_steps,
             "avg_val_loss": val_loss,
-            "avg_val_acc": val_acc
+            "avg_val_acc": val_acc,
         }
         # easy_tf_log.tflog('reward_predictor_training_steps_per_second',
         #                   rate)
@@ -171,4 +190,6 @@ class RewardPredictorEnsemble(nn.Module):
                     torch.save(self.state_dict(), self.checkpoint_path)
                     self.best_accuracy = accuracy
 
-        return running_loss / len(val_dataloader), running_accuracy / len(val_dataloader)
+        return running_loss / len(val_dataloader), running_accuracy / len(
+            val_dataloader
+        )

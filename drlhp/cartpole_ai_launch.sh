@@ -1,0 +1,1 @@
+python run.py --base-env CartPole-v1 --reward-model-checkpoint-path cartpole_ai_reward.pkl --pretrained-reward-model-path cartpole_ai_reward.pkl --num-epochs 25 --collect-seg-interval 5

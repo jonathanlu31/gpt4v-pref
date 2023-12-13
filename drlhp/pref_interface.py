@@ -14,9 +14,9 @@ from random import shuffle
 # import easy_tf_log
 import numpy as np
 
-from human_prefs import get_prefs, VideoRenderer
+from human_prefs import get_prefs
 from pref_db import Segment
-from llm_prefs import GPT, PREFERENCE_PROMPT
+from llm_prefs import GPT, CARTPOLE_PROMPT, add_line
 
 
 class PrefInterface:
@@ -57,7 +57,10 @@ class PrefInterface:
             if self.use_human:
                 pref = get_prefs(np.array(s1.frames), np.array(s2.frames), is_img=True)
             else:
-                pref = GPT.combine_and_query(np.array(s1.frames), np.array(s2.frames))
+                # pref = GPT.query_two_imgs(np.array(s1.frames), np.array(s2.frames), CARTPOLE_PROMPT)
+                pref = GPT.combine_and_query(
+                    np.array(s1.frames), np.array(s2.frames), CARTPOLE_PROMPT
+                )
 
             if pref is not None:
                 if pref != 0 or np.random.random() < 0.3:

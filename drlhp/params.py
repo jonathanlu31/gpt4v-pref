@@ -46,7 +46,7 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--num-reward-epochs-per-epoch",
         type=int,
-        default=2,
+        default=4,
         help="Number of times the reward training runs through the preference db every full training loop",
     )
     parser.add_argument(
@@ -95,4 +95,4 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
 
 def add_general_args(parser: ArgumentParser):
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--base-env", type=str, default='HalfCheetah-v4')
+    parser.add_argument("--base-env", type=str, default="HalfCheetah-v4")

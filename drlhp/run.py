@@ -94,10 +94,8 @@ class PretrainCallback(BaseCallback):
 
             elif i % self.collect_seg_interval == 0:
                 seg.finalise()
-                try:
-                    self.seg_pipe.put(seg, False)
-                except Queue.Full as _e:
-                    pass
+                # if not self.seg_pipe.full():
+                self.seg_pipe.put(seg)
                 seg = Segment()
 
     def _on_rollout_start(self) -> None:
@@ -140,8 +138,8 @@ def main(args):
     set_random_seed(args.seed)
     Segment.set_max_len(args.seg_length)
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("mps")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("mps")
 
     run(args, device)
 
@@ -179,15 +177,13 @@ def start_training(
 
     wandb.init(
         # Set the project where this run will be logged
-        project="run_script",
+        project="run_script_cartpole_llm",
         # Track hyperparameters and run metadata
     )
     torch.set_default_dtype(torch.float32)
     Segment.set_max_len(args.seg_length)
     env = CustomEnv(args)
-    policy = DQN(
-        "MlpPolicy", env, verbose=1, device=device
-    )
+    policy = DQN("MlpPolicy", env, verbose=1, device=device)
 
     # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
     # os.makedirs(ckpt_dir)
@@ -195,12 +191,12 @@ def start_training(
 
     n_train = args.max_prefs * (1 - args.prefs_val_fraction)
     n_val = args.max_prefs * args.prefs_val_fraction
-    if os.path.exists('train_preferences.pkl'):
-        pref_db_train = PrefDB.load('train_preferences.pkl')
+    if os.path.exists("train_preferences.pkl"):
+        pref_db_train = PrefDB.load("train_preferences.pkl")
     else:
         pref_db_train = PrefDB(maxlen=n_train)
-    if os.path.exists('val_preferences.pkl'):
-        pref_db_val = PrefDB.load('val_preferences.pkl')
+    if os.path.exists("val_preferences.pkl"):
+        pref_db_val = PrefDB.load("val_preferences.pkl")
     else:
         pref_db_val = PrefDB(maxlen=n_val)
 
@@ -221,7 +217,7 @@ def start_training(
                     args.save_interval,
                 ),
                 reset_num_timesteps=False,
-                progress_bar=True
+                progress_bar=True,
             )
         else:
             policy.learn(
@@ -232,13 +228,13 @@ def start_training(
         pref_db_train.save("train_preferences.pkl")
         pref_db_val.save("val_preferences.pkl")
 
-        for i in tqdm.trange(
-            args.num_reward_epochs_per_epoch, dynamic_ncols=True
-        ):
-            wandb.log(env.reward_predictor.train_one_epoch(
-                copy.deepcopy(pref_db_train),
-                copy.deepcopy(pref_db_val),
-            ))
+        for i in tqdm.trange(args.num_reward_epochs_per_epoch, dynamic_ncols=True):
+            wandb.log(
+                env.reward_predictor.train_one_epoch(
+                    copy.deepcopy(pref_db_train),
+                    copy.deepcopy(pref_db_val),
+                )
+            )
 
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
