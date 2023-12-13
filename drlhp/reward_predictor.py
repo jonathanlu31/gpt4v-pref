@@ -78,6 +78,7 @@ class RewardPredictorEnsemble(nn.Module):
         seg_len = s1.shape[1]
         sum_s1 = torch.zeros(batch_size)
         sum_s2 = torch.zeros(batch_size)
+        s1, s2 = s1.float(), s2.float()
         for pred in self.predictors:
             s1_reward = torch.sum(torch.vstack(
                     [pred(s1[:, i, :]) for i in range(seg_len)]
@@ -91,11 +92,11 @@ class RewardPredictorEnsemble(nn.Module):
 
         return torch.hstack([sum_s1.unsqueeze(1), sum_s2.unsqueeze(1)]) / self.num_predictors
 
-    def get_reward(self, observation, state):
+    def get_reward(self, observation, action):
         return torch.mean(
             torch.Tensor(
                 [
-                    predictor(torch.hstack([observation, state]))
+                    predictor(torch.hstack([observation, action]))
                     for predictor in self.predictors
                 ]
             )

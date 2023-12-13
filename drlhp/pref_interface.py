@@ -60,7 +60,8 @@ class PrefInterface:
                 pref = GPT.combine_and_query(np.array(s1.frames), np.array(s2.frames))
 
             if pref is not None:
-                pref_pipe.put((s1, s2, pref))
+                if pref != 0 or np.random.random() < 0.3:
+                    pref_pipe.put((s1, s2, pref))
             # If pref is None, the user answered "incomparable" for the segment
             # pair. The pair has been marked as tested; we just drop it.
 

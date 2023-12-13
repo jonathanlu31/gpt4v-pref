@@ -22,7 +22,7 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--reward-learning-rate",
         type=float,
-        default=1e-3,
+        default=1e-4,
         help="Learning rate for the reward predictor",
     )
     parser.add_argument(
@@ -46,11 +46,11 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--num-reward-epochs-per-epoch",
         type=int,
-        default=1,
+        default=2,
         help="Number of times the reward training runs through the preference db every full training loop",
     )
     parser.add_argument(
-        "--pretrained-reward-predictor-path",
+        "--pretrained-reward-model-path",
         type=str,
         default="cheetah_reward.pkl",
         help="Pretrained reward model path",
@@ -61,7 +61,7 @@ def add_policy_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--policy-learning-rate",
         type=float,
-        default=1e-3,
+        default=3e-4,
         help="Learning rate for the policy agent",
     )
     parser.add_argument(

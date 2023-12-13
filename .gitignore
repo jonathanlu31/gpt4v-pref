@@ -149,3 +149,7 @@ wandb
 cache/
 
 __*.sh
+
+.DS_Store
+
+*.DS_Store

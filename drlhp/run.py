@@ -1,6 +1,6 @@
 import logging
 import torch
-from stable_baselines3 import PPO
+from stable_baselines3 import DQN, PPO
 from stable_baselines3.common.callbacks import EveryNTimesteps
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.results_plotter import load_results, ts2xy
@@ -18,6 +18,7 @@ from params import parse_args
 
 from pref_interface import PrefInterface
 from pref_db import PrefDB, PrefBuffer, Segment
+import wandb
 
 
 def set_random_seed(seed=42):
@@ -75,6 +76,7 @@ class PretrainCallback(BaseCallback):
         """
         base_env = self.training_env.envs[0].env
         obs, info = base_env.reset()
+
         seg = Segment()
 
         for i in range(1, self.num_steps_explore + 1):
@@ -86,13 +88,17 @@ class PretrainCallback(BaseCallback):
             seg.append(frame, rewards, obs, ac)
 
             # add frame to buffer
-            if done or i % self.collect_seg_interval == 0:
-                seg.finalise()
-                self.seg_pipe.put(seg)
+            if done:
+                obs, info = base_env.reset()
                 seg = Segment()
 
-                if done:
-                    obs = base_env.reset()
+            elif i % self.collect_seg_interval == 0:
+                seg.finalise()
+                try:
+                    self.seg_pipe.put(seg, False)
+                except Queue.Full as _e:
+                    pass
+                seg = Segment()
 
     def _on_rollout_start(self) -> None:
         """
@@ -169,11 +175,18 @@ def start_training(
     device,
     log_dir=None,
 ):
+    wandb.login()
+
+    wandb.init(
+        # Set the project where this run will be logged
+        project="run_script",
+        # Track hyperparameters and run metadata
+    )
     torch.set_default_dtype(torch.float32)
     Segment.set_max_len(args.seg_length)
     env = CustomEnv(args)
-    policy = PPO(
-        "MlpPolicy", env, verbose=1, device=device, tensorboard_log="./ppo_runs/"
+    policy = DQN(
+        "MlpPolicy", env, verbose=1, device=device
     )
 
     # ckpt_dir = osp.join(log_dir, "policy_checkpoints")
@@ -182,8 +195,14 @@ def start_training(
 
     n_train = args.max_prefs * (1 - args.prefs_val_fraction)
     n_val = args.max_prefs * args.prefs_val_fraction
-    pref_db_train = PrefDB(maxlen=n_train)
-    pref_db_val = PrefDB(maxlen=n_val)
+    if os.path.exists('train_preferences.pkl'):
+        pref_db_train = PrefDB.load('train_preferences.pkl')
+    else:
+        pref_db_train = PrefDB(maxlen=n_train)
+    if os.path.exists('val_preferences.pkl'):
+        pref_db_val = PrefDB.load('val_preferences.pkl')
+    else:
+        pref_db_val = PrefDB(maxlen=n_val)
 
     pref_buffer = PrefBuffer(db_train=pref_db_train, db_val=pref_db_val)
     pref_buffer.start_recv_thread(pref_pipe)
@@ -216,10 +235,10 @@ def start_training(
         for i in tqdm.trange(
             args.num_reward_epochs_per_epoch, dynamic_ncols=True
         ):
-            env.reward_predictor.train_one_epoch(
+            wandb.log(env.reward_predictor.train_one_epoch(
                 copy.deepcopy(pref_db_train),
                 copy.deepcopy(pref_db_val),
-            )
+            ))
 
 
 def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
