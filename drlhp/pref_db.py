@@ -160,8 +160,9 @@ class PrefDB(Dataset):
         return s1_pt, s2_pt, pref_pt
 
     def save(self, path):
+        copy = copy.deepcopy(self)
         with gzip.open(path, "wb") as pkl_file:
-            pickle.dump(self, pkl_file)
+            pickle.dump(copy, pkl_file)
 
     @staticmethod
     def load(path):
