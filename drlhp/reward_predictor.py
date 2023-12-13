@@ -11,14 +11,21 @@ from torch.utils.data import DataLoader
 class CoreNetwork(nn.Module):
     def __init__(self, input_dim):
         super().__init__()
-        self.fc1 = nn.Linear(input_dim, 64)
-        self.fc2 = nn.Linear(64, 1)
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 64),
+            nn.LeakyReLU(),
+            nn.Linear(64, 16),
+            nn.LeakyReLU(),
+            nn.Linear(16, 1)
+        )
 
     def forward(self, input: torch.Tensor):
-        return self.fc2(self.fc1(input.float()))
+        return self.net(input)
 
 
-class RewardPredictorNetwork(nn.Module):
+class RewardPredictorEnsemble(nn.Module):
     """
     Predict the reward that a human would assign to each frame of
     the input trajectory, trained using the human's preferences between
@@ -32,49 +39,6 @@ class RewardPredictorNetwork(nn.Module):
     - rs1/rs2   Reward summed over all frames for each trajectory
     - pred      Predicted preference
     """
-
-    def __init__(self, ob_dim, ac_dim):
-        super().__init__()
-        self.ob_dim = ob_dim
-        self.ac_dim = ac_dim
-        self.core_network = CoreNetwork(ob_dim[0] + ac_dim[0])
-
-        # self.dropout = dropout
-        # self.batchnorm = batchnorm
-
-        self.timestep = 0
-
-    def forward(self, s1, s2):
-        """Gets the reward preference
-
-        Shape of sequences (batch_size x seq_len x (observation_dim + action_dim))
-
-        Args:
-            s1 (np.array): First trajectory segment to rate
-            s2 (np.array): Second trajectory segment to rate
-
-        Returns:
-            torch.Tensor: Summed logits of ratings from reward network
-        """
-        seg_len = s1.shape[1]
-
-        r1 = torch.vstack(
-            [self.core_network(s1[:, i, :]) for i in range(seg_len)]
-        ).reshape((s1.shape[0], seg_len))
-        r2 = torch.vstack(
-            [self.core_network(s2[:, i, :]) for i in range(seg_len)]
-        ).reshape((s1.shape[0], seg_len))
-
-        sum_r1 = torch.sum(r1, dim=1)
-        sum_r2 = torch.sum(r2, dim=1)
-
-        return torch.hstack([sum_r1, sum_r2])
-
-    def get_reward(self, observation, state):
-        return self.core_network(torch.hstack([observation, state]))
-
-
-class RewardPredictorEnsemble(nn.Module):
     def __init__(
         self,
         num_predictors: int,
@@ -87,39 +51,51 @@ class RewardPredictorEnsemble(nn.Module):
         super().__init__()
         self.num_predictors = num_predictors
         self.predictors = nn.ModuleList(
-            [RewardPredictorNetwork(ob_dim, ac_dim) for _ in range(num_predictors)]
+            [CoreNetwork(ob_dim[0] + ac_dim[0]) for _ in range(num_predictors)]
         )
         self.bs = batch_size
         self.optimizer = torch.optim.Adam(self.predictors.parameters(), lr=lr)
 
         self.best_accuracy = 0
         self.checkpoint_path = checkpoint_path
+        self.num_epochs = 0
 
     def forward(self, s1, s2):
-        """_summary_
+        """Gets the reward preference
 
+        Shape of sequences (batch_size x seq_len x (observation_dim + action_dim))
         Args:
-            s1 (_type_): _description_
-            s2 (_type_): _description_
+            s1 (np.array): First trajectory segment to rate
+            s2 (np.array): Second trajectory segment to rate
 
         predictor outputs: (batch, 2)
         Stacked: (num_predictors, batch, 2)
 
         Returns:
-            torch.Tensor: (2,)
+            torch.Tensor (2,): Summed logits of ratings from reward network
         """
-        return torch.mean(
-            torch.vstack([predictor(s1, s2) for predictor in self.predictors]).reshape(
-                (self.num_predictors, s1.shape[0], 2)
-            ),
-            axis=0,
-        )
+        batch_size = s1.shape[0]
+        seg_len = s1.shape[1]
+        sum_s1 = torch.zeros(batch_size)
+        sum_s2 = torch.zeros(batch_size)
+        for pred in self.predictors:
+            s1_reward = torch.sum(torch.vstack(
+                    [pred(s1[:, i, :]) for i in range(seg_len)]
+                ).reshape((s1.shape[0], seg_len)), dim=1)
+            s2_reward = torch.sum(torch.vstack(
+                    [pred(s2[:, i, :]) for i in range(seg_len)]
+                ).reshape((s1.shape[0], seg_len)), dim=1)
+
+            sum_s1 += s1_reward
+            sum_s2 += s2_reward
+
+        return torch.hstack([sum_s1.unsqueeze(1), sum_s2.unsqueeze(1)]) / self.num_predictors
 
     def get_reward(self, observation, state):
         return torch.mean(
             torch.Tensor(
                 [
-                    predictor.get_reward(observation, state)
+                    predictor(torch.hstack([observation, state]))
                     for predictor in self.predictors
                 ]
             )
@@ -137,21 +113,27 @@ class RewardPredictorEnsemble(nn.Module):
         total_steps = 0
         start_time = time.time()
         train_dataloader = DataLoader(prefs_train, self.bs, shuffle=True)
-
+        total_train_loss = 0
         for s1, s2, pref in train_dataloader:
             self.optimizer.zero_grad()
             network_pref = self(s1, s2)
             loss = F.cross_entropy(network_pref, pref)
-
+            total_train_loss += loss
             loss.backward()
             self.optimizer.step()
 
             total_steps += 1
 
-        self.val_step(prefs_val)
+        val_loss, val_acc = self.val_step(prefs_val)
 
         end_time = time.time()
         rate = (total_steps) / (end_time - start_time)
+        self.num_epochs += 1
+        return {
+            "avg_train_loss": total_train_loss / total_steps,
+            "avg_val_loss": val_loss,
+            "avg_val_acc": val_acc
+        }
         # easy_tf_log.tflog('reward_predictor_training_steps_per_second',
         #                   rate)
 
@@ -161,6 +143,8 @@ class RewardPredictorEnsemble(nn.Module):
 
         val_dataloader = DataLoader(prefs_val, self.bs, shuffle=True)
 
+        running_loss = 0
+        running_accuracy = 0
         with torch.no_grad():
             for s1, s2, pref in val_dataloader:
                 network_pref = self(s1, s2)
@@ -176,8 +160,8 @@ class RewardPredictorEnsemble(nn.Module):
                     network_predictions[inverted_mask] == torch.argmax(labels, dim=1)
                 ) / len(labels)
 
-                with open("metrics.txt", "a") as f:
-                    f.write(f"Loss: {loss} ---- Accuracy: {accuracy}\n")
+                running_loss += loss
+                running_accuracy += accuracy
 
                 # log validation loss
                 # log accuracy
@@ -185,3 +169,5 @@ class RewardPredictorEnsemble(nn.Module):
                 if accuracy > self.best_accuracy:
                     torch.save(self.state_dict(), self.checkpoint_path)
                     self.best_accuracy = accuracy
+
+        return running_loss / len(val_dataloader), running_accuracy / len(val_dataloader)

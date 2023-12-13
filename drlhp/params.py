@@ -49,6 +49,12 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         default=1,
         help="Number of times the reward training runs through the preference db every full training loop",
     )
+    parser.add_argument(
+        "--pretrained-reward-predictor-path",
+        type=str,
+        default="cheetah_reward.pkl",
+        help="Pretrained reward model path",
+    )
 
 
 def add_policy_args(parser: ArgumentParser) -> None:
@@ -89,3 +95,4 @@ def add_preference_arguments(parser: ArgumentParser) -> None:
 
 def add_general_args(parser: ArgumentParser):
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--base-env", type=str, default='HalfCheetah-v4')

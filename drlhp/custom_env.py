@@ -12,7 +12,7 @@ class CustomEnv(gym.Env):
 
     def __init__(self, args):
         super().__init__()
-        self.base_env = gym.make("Swimmer-v4", render_mode="rgb_array")
+        self.base_env = gym.make(args.base_env, render_mode="rgb_array")
         self.observation_space = self.base_env.observation_space
         self.action_space = self.base_env.action_space
         self.include_actions = args.include_actions
@@ -27,7 +27,9 @@ class CustomEnv(gym.Env):
         self.observations = []
         self.actions = []
         self.dones = []
-        # self.preference_db = PrefDB()
+
+        if args.pretrained_reward_model_path:
+            self.reward_predictor.load_state_dict(torch.load(args.pretrained_reward_model_path))
 
     def step(self, action):
         obs, _base_reward, term, trunc, info = self.base_env.step(action)

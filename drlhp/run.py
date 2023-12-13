@@ -17,7 +17,6 @@ from custom_env import CustomEnv
 from params import parse_args
 
 from pref_interface import PrefInterface
-from reward_predictor import RewardPredictorEnsemble
 from pref_db import PrefDB, PrefBuffer, Segment
 
 
