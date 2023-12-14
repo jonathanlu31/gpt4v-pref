@@ -14,6 +14,8 @@ class CustomEnv(gym.Env):
         super().__init__()
         if args.base_env == 'Walker2d-v4':
             self.base_env = gym.make(args.base_env, render_mode="rgb_array", healthy_z_range=(0.4, 2), healthy_angle_range=(-5, 5))
+        elif args.base_env == 'LunarLander-v2':
+            self.base_env = gym.make(args.base_env, render_mode="rgb_array", continuous=True)
         else:
             self.base_env = gym.make(args.base_env, render_mode="rgb_array")
         self.observation_space = self.base_env.observation_space
