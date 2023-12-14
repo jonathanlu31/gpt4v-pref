@@ -4,8 +4,6 @@ import torch
 
 from reward_predictor import RewardPredictorEnsemble
 
-# from pref_db import PrefDB
-
 
 class CustomEnv(gym.Env):
     """Custom Environment that follows gym interface."""

@@ -17,7 +17,7 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
         "--include-actions",
         action="store_true",
         help="Flag to include actions in the reward predictions or just the observations",
-        default="false",
+        default=False,
     )
     parser.add_argument(
         "--reward-learning-rate",
