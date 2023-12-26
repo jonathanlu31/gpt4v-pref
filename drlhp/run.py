@@ -177,7 +177,7 @@ def start_training(
 
     wandb.init(
         # Set the project where this run will be logged
-        project="run_script_walker_human_split",
+        project="run_script_walker2d_ai",
         # Track hyperparameters and run metadata
     )
     torch.set_default_dtype(torch.float32)
@@ -245,7 +245,7 @@ def start_preference_labeling_process(args, seg_pipe, pref_pipe, log_dir=None):
     torch.set_default_dtype(torch.float32)
     # Needs to be done in the main process because does GUI setup work
     # prefs_log_dir = os.path.join(log_dir, "pref_interface")
-    pi = PrefInterface(max_segs=args.max_segs, use_human=True)
+    pi = PrefInterface(max_segs=args.max_segs, use_human=False)
 
     # The preference interface needs to get input from stdin. stdin is
     # automatically closed at the beginning of child processes in Python,

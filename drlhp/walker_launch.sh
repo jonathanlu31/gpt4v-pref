@@ -1,0 +1,1 @@
+/Users/jonathanlu/opt/anaconda3/envs/cs285_hw2/bin/python /Users/jonathanlu/Desktop/berk_cs/cs285/285-project/drlhp/run.py --base-env Walker2d-v4 --reward-model-checkpoint-path walker_ai_reward_split.pkl --pretrained-reward-model-path walker_ai_reward_split.pkl --num-epochs 30 --collect-seg-interval 12

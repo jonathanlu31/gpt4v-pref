@@ -13,18 +13,18 @@ args.ensemble_size = 1
 args.reward_learning_rate = 1
 args.rwd_mdl_bs = -1
 args.reward_model_checkpoint_path = ''
-args.pretrained_reward_model_path = 'walker_human_reward_split.pkl'
+args.pretrained_reward_model_path = 'walker_ai_reward_split.pkl'
 
 env = CustomEnv(args)
-model = SAC("MlpPolicy", env, verbose=1, tensorboard_log='./walker_human_policy')
-model.learn(total_timesteps=10_000)
-model.save('walker_model')
+model = PPO("MlpPolicy", env, verbose=1)
+model.learn(total_timesteps=130_000)
+new_model = PPO.load('split.zip', env=env)
+model.save('split')
 
-new_model = SAC.load('walker_model.zip', env=env)
 
 vec_env = new_model.get_env()
 obs = vec_env.reset()
-for i in range(5000):
+for i in range(6000):
     action, _state = new_model.predict(obs, deterministic=True)
     obs, reward, done, info = vec_env.step(action)
     vec_env.render("human")

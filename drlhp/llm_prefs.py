@@ -15,6 +15,10 @@ SWIMMER_PROMPT = """You are an expert in the English language. This is an image 
 
 CARTPOLE_PROMPT = """You have been given two drawings of a square cart trying to balance a brown, wooden pole. Priority 1: The pole should be as close to vertical as possible, perpendicular to the ground. Priority 2: the cart should be centered in its respective frame. Pick the image (LEFT or RIGHT) that best satisfies these priorities. They both might bad at balancing the pole but give your best judgement. Output a single answer: LEFT or RIGHT."""
 
+LUNAR_LANDER_PROMPT = """You have been given two drawings separated by a red line. They each contain a purple spaceship in the air. The spaceship should move to and hover at the upper left corner. Pick the image (RIGHT or LEFT) where the purple shape is closest to the upper left corner of its frame. Do not pick the image if the spaceship is not visible in frame. Do not pick the image if the purple trapezoid spaceship is pointed towards the ground. They both might be far away, but give your best judgement about which is most likely to arrive at the corner. Output a single answer: RIGHT or LEFT. """
+
+WALKER2D_PROMPT = """You have been given two images of an object with two legs in a checkerboard background. Pick the image (RIGHT or LEFT) where the object's legs look most like they're doing a split, specifically, the purple and brown legs should be far apart. They both might not look like a split, but give your best judgement about which is most similar to a split. Explain your reasoning step-by-step and end with a single answer: RIGHT or LEFT. """
+
 
 class GPT:
     KEY = os.environ.get("KEY")
@@ -65,17 +69,17 @@ class GPT:
         pref = response.choices[0].message.content
         print(pref)
         print(response.usage.total_tokens)
-        # TODO: log the full content as well for debugging if we decide to use step-by-step reasoning
         return GPT.pref_to_int(pref)
 
     @staticmethod
     def pref_to_int(pref: str) -> Literal[-1, 1, 0, None]:
         # assert pref in GPT.CHOICES, f'LLM responded with "{pref}", which is not a valid response'
-        if "LEFT" in pref or "FIRST" in pref:
+        final_response = pref[-10:]
+        if "LEFT" in final_response or "FIRST" in final_response:
             return -1
-        elif "RIGHT" in pref or "SECOND" in pref:
+        elif "RIGHT" in final_response or "SECOND" in final_response:
             return 1
-        elif "NEITHER" in pref:
+        elif "NEITHER" in final_response:
             return 0
         return None
 
@@ -160,6 +164,7 @@ class GPT:
         #     print("Match predictions:", pref2)
         #     return pref
         # print("Didn't match:", pref)
+        print(pref)
         return pref
         # os.remove(VideoRenderer.TMP_PNG)
         # return pref

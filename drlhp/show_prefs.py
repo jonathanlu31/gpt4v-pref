@@ -17,7 +17,7 @@ import cv2
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("prefs", help=".pkl file")
+    parser.add_argument("--prefs", help=".pkl file")
     args = parser.parse_args()
 
     prefs = PrefDB.load(args.prefs)

@@ -16,7 +16,7 @@ import numpy as np
 
 from human_prefs import get_prefs
 from pref_db import Segment
-from llm_prefs import GPT, CARTPOLE_PROMPT, add_line
+from llm_prefs import GPT, CARTPOLE_PROMPT, add_line, WALKER2D_PROMPT
 
 
 class PrefInterface:
@@ -59,7 +59,7 @@ class PrefInterface:
             else:
                 # pref = GPT.query_two_imgs(np.array(s1.frames), np.array(s2.frames), CARTPOLE_PROMPT)
                 pref = GPT.combine_and_query(
-                    np.array(s1.frames), np.array(s2.frames), CARTPOLE_PROMPT
+                    np.array(s1.frames), np.array(s2.frames), WALKER2D_PROMPT
                 )
 
             if pref is not None:

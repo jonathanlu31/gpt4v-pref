@@ -52,7 +52,7 @@ def add_reward_predictor_args(parser: ArgumentParser) -> None:
     parser.add_argument(
         "--pretrained-reward-model-path",
         type=str,
-        default="cheetah_reward.pkl",
+        default="",
         help="Pretrained reward model path",
     )
 

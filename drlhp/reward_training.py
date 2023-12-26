@@ -9,14 +9,14 @@ wandb.login()
 
 run = wandb.init(
     # Set the project where this run will be logged
-    project="reward_model_walker_human_split",
+    project="reward_model_walker_split_ai",
     # Track hyperparameters and run metadata
 )
 
 reward_model = RewardPredictorEnsemble(
-    1, (17,), False, (6,), 1e-3, 32, "walker_human_reward_split.pkl"
+    1, (17,), False, (6,), 1e-4, 32, "walker_ai_reward_split.pkl"
 )
-# reward_model.load_state_dict(torch.load("walker_human_reward_split.pkl"))
+# reward_model.load_state_dict(torch.load("walker_ai_reward_split.pkl"))
 
 train_db = PrefDB.load("train_preferences.pkl")
 val_db = PrefDB.load("val_preferences.pkl")
